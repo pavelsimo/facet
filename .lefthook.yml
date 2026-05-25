@@ -1,0 +1,9 @@
+pre-commit:
+  parallel: false
+  commands:
+    fmt-check:
+      run: uv run ruff format --check .
+    lint:
+      run: uv run ruff check .
+    typecheck:
+      run: uv run mypy facet/

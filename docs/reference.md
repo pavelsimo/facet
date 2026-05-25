@@ -1,0 +1,100 @@
+---
+title: Reference
+description: Global flags, environment variables, exit codes, and shell completions
+---
+
+## Global flags
+
+Global flags can be placed before or after the subcommand. These are equivalent:
+
+```bash
+fascat --json inspect input.step
+fascat inspect input.step --json
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--help` | `-h` | — | Show help for the current command |
+| `--version` | `-V` | — | Show version and exit |
+| `--verbose` | `-v` | `false` | Enable verbose output |
+| `--quiet` | `-q` | `false` | Suppress non-essential output |
+| `--json` | — | `false` | Output results as JSON |
+| `--no-color` | — | `false` | Disable ANSI color output |
+| `--dry-run` | `-n` | `false` | Preview changes without applying them |
+| `--no-input` | — | `false` | Disable interactive prompts |
+
+`-h` / `--help` and `-V` / `--version` are invocation-wide controls. They work before or after subcommands and ignore other arguments.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `fascat inspect input.step` | Inspect STEP assembly metadata and planned conversion inputs |
+| `fascat convert input.step output.usdc` | Convert STEP CAD into OpenUSD |
+| `fascat validate output.usdc` | Validate generated USD output |
+| `fascat help [command]` | Show top-level or command-specific help |
+| `fascat version` | Print version and exit |
+
+## Convert flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--profile` | `realtime-desktop` | Conversion profile: `inspect-only`, `realtime-desktop`, or `realtime-web` |
+| `--sag` | profile value | CAD tessellation sag tolerance |
+| `--angle` | profile value | CAD tessellation angle tolerance in degrees |
+| `--target-triangles` | profile value | Target triangle count for optimized LOD0 |
+| `--ratio` | unset | Simplification ratio when no triangle target is set |
+| `--lods` | profile value | Comma-separated LOD ratios, for example `0.5,0.25,0.1` |
+| `--uv0` | `box` | UV0 generation mode: `none`, `box`, or `unwrap` |
+| `--debug` | `false` | Prefer debuggable USDA output conventions |
+| `--report` | unset | Write a JSON conversion report sidecar |
+| `--force` | `false` | Overwrite an existing output file |
+
+## File arguments
+
+Use `-` for standard streams:
+
+```bash
+cat input.step | fascat inspect -
+cat input.step | fascat convert - - --profile realtime-web
+cat output.usdc | fascat validate -
+```
+
+When output is `-`, USD bytes are reserved for stdout and progress/errors stay on stderr.
+
+## Output streams
+
+| Stream | Contents |
+|--------|----------|
+| stdout | Primary command output and `--json` payloads |
+| stderr | Errors, progress, warnings, and diagnostics |
+
+When `--json` is active, expected runtime errors are reported as JSON payloads on stdout and still exit non-zero.
+
+## Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `NO_COLOR` | Set to any non-empty value to disable color output |
+
+Color is also disabled when `--no-color` is passed, `TERM=dumb`, or the relevant stream is not a TTY.
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Runtime failure |
+| `2` | Invalid usage |
+
+## Shell completions
+
+Typer provides built-in shell completion support:
+
+```bash
+# Install completion for your shell (auto-detects)
+fascat --install-completion
+
+# Show the completion script without installing
+fascat --show-completion
+```

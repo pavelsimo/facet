@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write  # required for PyPI trusted publishing
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release  # configured in PyPI trusted publishing settings
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Build distribution packages
+        run: uv build
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
+
+      - name: Update Homebrew tap
+        if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+
+          # Wait for PyPI to propagate the new release
+          sleep 30
+
+          # Fetch package metadata from PyPI
+          INFO=$(curl -sf "https://pypi.org/pypi/fascat/$VERSION/json")
+          SHA256=$(echo "$INFO" | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          for f in data['urls']:
+              if f['packagetype'] == 'sdist':
+                  print(f['digests']['sha256'])
+                  break
+          ")
+          URL=$(echo "$INFO" | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          for f in data['urls']:
+              if f['packagetype'] == 'sdist':
+                  print(f['url'])
+                  break
+          ")
+
+          # Clone tap repo and update formula
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/pavelsimo/homebrew-tap.git" tap
+          cd tap
+          sed -i "s|url \".*\"|url \"$URL\"|" Formula/fascat.rb
+          sed -i "s|sha256 \".*\"|sha256 \"$SHA256\"|" Formula/fascat.rb
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git commit -am "🔖 release v$VERSION"
+          git push
