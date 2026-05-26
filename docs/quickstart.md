@@ -27,6 +27,7 @@ cat motor.step | fascat inspect -
 ## Convert to OpenUSD
 
 ```bash
+fascat convert motor.step
 fascat convert motor.step motor.usdc --profile realtime-desktop
 fascat convert motor.step motor.usda --debug --report report.json
 fascat convert motor.step - --dry-run

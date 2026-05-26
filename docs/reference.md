@@ -30,7 +30,7 @@ fascat inspect input.step --json
 | Command | Description |
 |---------|-------------|
 | `fascat inspect input.step` | Inspect STEP assembly metadata and planned conversion inputs |
-| `fascat convert input.step output.usdc` | Convert STEP CAD into OpenUSD |
+| `fascat convert input.step [output.usdc]` | Convert STEP CAD into OpenUSD |
 | `fascat validate output.usdc` | Validate generated USD output |
 | `fascat help [command]` | Show top-level or command-specific help |
 | `fascat version` | Print version and exit |
@@ -62,6 +62,8 @@ cat input.step | fascat inspect -
 cat input.step | fascat convert - - --profile realtime-web
 cat output.usdc | fascat validate -
 ```
+
+When the convert output argument is omitted for a file input, Fascat writes beside the input with a `.usdc` suffix. Stdin input requires an explicit output path or `-`.
 
 When output is `-`, USD bytes are reserved for stdout and progress/errors stay on stderr.
 

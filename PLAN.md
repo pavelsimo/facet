@@ -475,6 +475,7 @@ fascat validate output.usdc
 Convert example:
 
 ```bash
+fascat convert input.step
 fascat convert input.step output.usdc \
   --profile realtime-desktop \
   --sag 0.1 \
@@ -491,6 +492,7 @@ fascat convert input.step output.usda --debug
 
 CLI behavior:
 
+- Default output path is the input path with a `.usdc` suffix when converting a file input.
 - Print source stats before processing.
 - Print triangle/material/part stats after each major stage.
 - Exit non-zero on invalid input, missing backend, or failed USD validation.
@@ -714,6 +716,7 @@ STEP tests:
 - Test hierarchy, names, units, color import, and repeated part detection.
 - Test `Tessellation.max_edge_length` on a STEP-backed tessellation path.
 - Test stable STEP IDs include source identity.
+- Test importer part identity reuses matching source, shape, and material fingerprints before tessellation.
 - Mark OCP-backed tests with `pytest.mark.requires_ocp`.
 
 CLI tests:

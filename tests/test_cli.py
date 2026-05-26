@@ -94,6 +94,12 @@ def test_convert_dry_run_json() -> None:
     assert '"dry_run": true' in result.output
 
 
+def test_convert_dry_run_defaults_output_to_usdc() -> None:
+    result = runner.invoke(app, ["--json", "--dry-run", "convert", "input.step"])
+    assert result.exit_code == 0
+    assert '"output": "input.usdc"' in result.output
+
+
 def test_inspect_dry_run() -> None:
     result = runner.invoke(app, ["--dry-run", "inspect", "input.step"])
     assert result.exit_code == 0
@@ -269,6 +275,12 @@ def test_dash_input_and_output_are_accepted_for_dry_run(capsys) -> None:  # type
     assert result.exit_code == 0
     assert '"input": "-"' in result.stdout
     assert '"output": "-"' in result.stdout
+
+
+def test_dash_input_requires_explicit_output(capsys) -> None:  # type: ignore[no-untyped-def]
+    result = invoke_run(["--dry-run", "convert", "-"], capsys)
+    assert result.exit_code == 2
+    assert "Output path is required" in result.stderr
 
 
 def test_json_error_payload_for_missing_file(capsys) -> None:  # type: ignore[no-untyped-def]

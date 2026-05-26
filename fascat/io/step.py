@@ -32,9 +32,10 @@ def _read_step_path(source: Path, *, source_identity: str) -> Asset:
             metadata={"source": str(source), "source_identity": source_identity},
         )
         parts: dict[str, Part] = {}
+        part_index: dict[tuple[str, str, str], str] = {}
         materials: dict[str, Material] = {}
         for index, label in enumerate(free_labels, start=1):
-            root.children.append(_build_node(label, f"root/{index}", source_identity, parts, materials))
+            root.children.append(_build_node(label, f"root/{index}", source_identity, parts, part_index, materials))
 
     report = Report(source_path=str(source))
     asset = Asset(
@@ -115,6 +116,7 @@ def _build_node(
     occurrence_path: str,
     source_identity: str,
     parts: dict[str, Part],
+    part_index: dict[tuple[str, str, str], str],
     materials: dict[str, Material],
 ) -> Node:
     from OCP.TDF import TDF_LabelSequence
@@ -133,7 +135,9 @@ def _build_node(
         XCAFDoc_ShapeTool.GetComponents_s(label, children, False)
         for index in range(children.Lower(), children.Upper() + 1):
             child = children.Value(index)
-            node.children.append(_build_node(child, f"{occurrence_path}/{index}", source_identity, parts, materials))
+            node.children.append(
+                _build_node(child, f"{occurrence_path}/{index}", source_identity, parts, part_index, materials)
+            )
         return node
 
     shape_label = _shape_definition_label(label)
@@ -142,11 +146,18 @@ def _build_node(
         return node
 
     part_entry = _label_entry(shape_label)
-    part_id = _stable_id("part", f"{source_identity}:{part_entry}")
+    color = _label_color(label) or _label_color(shape_label) or (0.75, 0.75, 0.75, 1.0)
+    material_id = _material_id(color)
+    shape_hash = _shape_fingerprint(shape)
+    part_id, is_new_part = _canonical_part_id(
+        source_identity=source_identity,
+        part_entry=part_entry,
+        shape_hash=shape_hash,
+        material_id=material_id,
+        part_index=part_index,
+    )
     node.part_id = part_id
-    if part_id not in parts:
-        color = _label_color(label) or _label_color(shape_label) or (0.75, 0.75, 0.75, 1.0)
-        material_id = _material_id(color)
+    if is_new_part:
         if material_id not in materials:
             materials[material_id] = Material(id=material_id, name=f"CAD color {material_id[-8:]}", base_color=color)
         parts[part_id] = Part(
@@ -159,10 +170,28 @@ def _build_node(
                 "occurrence_label": label_entry,
                 "source_identity": source_identity,
                 "source_name": _label_name(shape_label) or "",
+                "shape_fingerprint": shape_hash,
             },
-            fingerprint=part_entry,
+            fingerprint=shape_hash,
         )
     return node
+
+
+def _canonical_part_id(
+    *,
+    source_identity: str,
+    part_entry: str,
+    shape_hash: str,
+    material_id: str,
+    part_index: dict[tuple[str, str, str], str],
+) -> tuple[str, bool]:
+    key = (source_identity, shape_hash, material_id)
+    existing = part_index.get(key)
+    if existing is not None:
+        return existing, False
+    part_id = _stable_id("part", f"{source_identity}:{part_entry}")
+    part_index[key] = part_id
+    return part_id, True
 
 
 def _shape_definition_label(label: Any) -> Any:
@@ -204,6 +233,13 @@ def _label_color(label: Any) -> tuple[float, float, float, float] | None:
         if XCAFDoc_ColorTool.GetColor_s(label, color_type, color):
             return (float(color.Red()), float(color.Green()), float(color.Blue()), 1.0)
     return None
+
+
+def _shape_fingerprint(shape: Any) -> str:
+    try:
+        return str(shape.HashCode(2_147_483_647))
+    except Exception:
+        return str(id(shape))
 
 
 def _label_transform(label: Any) -> np.ndarray:

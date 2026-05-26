@@ -47,6 +47,7 @@ fascat inspect motor.step
 fascat --json inspect motor.step
 
 # Convert STEP to binary OpenUSD
+fascat convert motor.step
 fascat convert motor.step motor.usdc --profile realtime-desktop
 
 # Tune tessellation, UVs, optimization, and LODs
@@ -73,7 +74,7 @@ fascat validate motor.usdc
 | Command | Description |
 |---------|-------------|
 | `fascat inspect input.step` | Inspect a STEP assembly before conversion |
-| `fascat convert input.step output.usdc` | Convert STEP CAD into OpenUSD |
+| `fascat convert input.step [output.usdc]` | Convert STEP CAD into OpenUSD |
 | `fascat validate output.usdc` | Validate generated USD output |
 | `fascat help [command]` | Show top-level or command-specific help |
 | `fascat version` | Print version and exit |

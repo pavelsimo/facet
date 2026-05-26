@@ -178,6 +178,7 @@ def cmd_inspect(
     "convert",
     epilog=f"""Examples:
   fascat convert motor.step motor.usdc
+  fascat convert motor.step
   fascat convert motor.step motor.usda --debug --report report.json
   fascat --dry-run --json convert motor.step motor.usdc
   cat motor.step | fascat convert - - --profile realtime-web
@@ -188,9 +189,12 @@ def cmd_convert(
     ctx: typer.Context,
     input_path: Annotated[Path, typer.Argument(help="Input STEP file, or '-' for stdin.", allow_dash=True)],
     output_path: Annotated[
-        Path,
-        typer.Argument(help="Output USD file, usually .usdc or .usda, or '-' for stdout.", allow_dash=True),
-    ],
+        Path | None,
+        typer.Argument(
+            help="Output USD file, usually .usdc or .usda, or '-' for stdout. Defaults to input .usdc.",
+            allow_dash=True,
+        ),
+    ] = None,
     profile: Annotated[Profile, typer.Option("--profile", help="Conversion profile.")] = Profile.REALTIME_DESKTOP,
     sag: Annotated[float | None, typer.Option("--sag", help="CAD tessellation sag tolerance.")] = None,
     angle: Annotated[
@@ -228,7 +232,7 @@ def cmd_convert(
     payload: dict[str, Any] = {
         "command": "convert",
         "input": str(input_path),
-        "output": str(output_path),
+        "output": str(output_path) if output_path is not None else None,
         "profile": profile.value,
         "sag": sag,
         "angle": angle,
@@ -247,6 +251,8 @@ def cmd_convert(
     lod_values = _parse_lods(lods, ctx, payload)
     payload["lods"] = lod_values
     _validate_step_input(input_path, ctx, payload)
+    output_path = _resolve_convert_output(input_path, output_path, ctx, payload)
+    payload["output"] = str(output_path)
     _validate_usd_output(output_path, ctx, payload)
     if ratio is not None and (ratio <= 0.0 or ratio >= 1.0):
         _fail(ctx, payload, "--ratio must be greater than 0 and less than 1.", code=2)
@@ -425,6 +431,19 @@ def _require_existing_file(path: Path, label: str, ctx: typer.Context, payload: 
         _fail(ctx, payload, f"Missing {label} file: {path}")
     if not path.is_file():
         _fail(ctx, payload, f"Expected {label} to be a file: {path}")
+
+
+def _resolve_convert_output(
+    input_path: Path,
+    output_path: Path | None,
+    ctx: typer.Context,
+    payload: dict[str, Any],
+) -> Path:
+    if output_path is not None:
+        return output_path
+    if _is_stdio(input_path):
+        _fail(ctx, payload, "Output path is required when reading STEP data from stdin.", code=2)
+    return input_path.with_suffix(".usdc")
 
 
 def _parse_lods(value: str | None, ctx: typer.Context, payload: dict[str, Any]) -> list[float] | None:
