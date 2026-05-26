@@ -115,12 +115,15 @@ def _face_material_indices_from_metadata(metadata: dict[str, str]) -> list[int] 
 
 
 def _deduplicate_parts_by_fingerprint(asset: Asset) -> Asset:
-    canonical_by_key: dict[tuple[str, tuple[str, ...]], str] = {}
+    canonical_by_key: dict[tuple[str, tuple[str, ...], tuple[int, ...] | None], str] = {}
     replacements: dict[str, str] = {}
     for part_id, part in asset.parts.items():
-        if part.fingerprint is None:
+        if part.fingerprint is None or part.mesh is None:
             continue
-        key = (part.fingerprint, tuple(part.material_ids))
+        material_indices = None
+        if part.mesh.material_indices is not None:
+            material_indices = tuple(int(value) for value in part.mesh.material_indices.tolist())
+        key = (part.fingerprint, tuple(part.material_ids), material_indices)
         canonical_id = canonical_by_key.get(key)
         if canonical_id is None:
             canonical_by_key[key] = part_id

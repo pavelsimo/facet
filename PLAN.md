@@ -746,6 +746,7 @@ STEP tests:
 - Test stable STEP IDs include source identity.
 - Test importer part identity reuses matching source, shape, and material fingerprints before tessellation.
 - Test STEP face color material plans map to mesh material indices for USD subsets.
+- Test tessellation dedupe preserves distinct per-face material assignments.
 - Mark OCP-backed tests with `pytest.mark.requires_ocp`.
 
 CLI tests:

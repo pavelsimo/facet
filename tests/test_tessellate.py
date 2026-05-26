@@ -40,6 +40,54 @@ def test_tessellate_deduplicates_parts_by_mesh_fingerprint() -> None:
     assert part_ids == ["part_a", "part_a"]
 
 
+def test_tessellate_keeps_distinct_per_face_material_assignments() -> None:
+    mesh = triangle_mesh()
+    red_face_mesh = Mesh(
+        points=mesh.points.copy(),
+        faces=mesh.faces.copy(),
+        material_indices=np.array([0], dtype=int),
+    )
+    blue_face_mesh = Mesh(
+        points=mesh.points.copy(),
+        faces=mesh.faces.copy(),
+        material_indices=np.array([1], dtype=int),
+    )
+    fingerprint = mesh.fingerprint()
+    root = Node(
+        id="root",
+        name="root",
+        children=[
+            Node(id="node_a", name="A", part_id="part_a"),
+            Node(id="node_b", name="B", part_id="part_b"),
+        ],
+    )
+    asset = Asset(
+        root=root,
+        parts={
+            "part_a": Part(
+                id="part_a",
+                name="Part A",
+                mesh=red_face_mesh,
+                material_ids=["red", "blue"],
+                fingerprint=fingerprint,
+            ),
+            "part_b": Part(
+                id="part_b",
+                name="Part B",
+                mesh=blue_face_mesh,
+                material_ids=["red", "blue"],
+                fingerprint=fingerprint,
+            ),
+        },
+    )
+
+    tessellated = asset.tessellate(Tessellation())
+    part_ids = [node.part_id for node in tessellated.root.walk() if node.part_id is not None]
+
+    assert tessellated.part_count == 2
+    assert part_ids == ["part_a", "part_b"]
+
+
 def test_tessellation_keep_brep_controls_source_shape_retention(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     import fascat.ops.tessellate as tessellate_module
 
