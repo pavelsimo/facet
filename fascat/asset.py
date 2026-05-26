@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -150,6 +150,9 @@ class Asset:
             stats["lod_triangles"] = sum(mesh.triangle_count for mesh in lod_meshes)
         return stats
 
+    def _report_stats(self) -> dict[str, int]:
+        return self.stats(include_lods=any(part.lod_meshes for part in self.parts.values()))
+
     def tessellate(self, options: Tessellation | None = None) -> Asset:
         from fascat.ops.tessellate import tessellate_asset
 
@@ -250,7 +253,32 @@ class Asset:
     def write_usd(self, path: str | Path, *, debug: bool = False) -> None:
         from fascat.io.usd import write_usd
 
-        write_usd(self, path, debug=debug)
+        before = self._report_stats()
+        options: dict[str, object] = {"format": "OpenUSD", "debug": debug}
+        timer = timed_step()
+        try:
+            with timer:
+                write_usd(self, path, debug=debug)
+        except Exception as exc:
+            self.report.add_error(str(exc) or exc.__class__.__name__)
+            self.report.add_step(
+                "write",
+                options=options,
+                before=before,
+                after=self._report_stats(),
+                duration=timer.duration,
+            )
+            self.report.finish(self._report_stats())
+            cast(Any, exc).report = self.report
+            raise
+        self.report.add_step(
+            "write",
+            options=options,
+            before=before,
+            after=self._report_stats(),
+            duration=timer.duration,
+        )
+        self.report.finish(self._report_stats())
 
     def to_dict(self) -> dict[str, Any]:
         return {
