@@ -8,7 +8,16 @@ from fascat.io.step import read_step
 from fascat.io.usd import validate_usd
 from fascat.material import Material
 from fascat.mesh import Mesh, MeshValidationError
-from fascat.options import LODOptions, MergeOptions, OptimizeOptions, RepairOptions, StageOptions, Tessellation
+from fascat.metadata import Metadata, PmiAnnotation, Tolerance
+from fascat.options import (
+    LODOptions,
+    MergeOptions,
+    OptimizeOptions,
+    RepairOptions,
+    StageOptions,
+    StepReadOptions,
+    Tessellation,
+)
 from fascat.pipeline import (
     convert,
     lods,
@@ -30,17 +39,21 @@ __all__ = [
     "FilterExpressionError",
     "LODOptions",
     "Material",
+    "Metadata",
     "MergeOptions",
     "Mesh",
     "MeshValidationError",
     "Node",
     "OptimizeOptions",
     "Part",
+    "PmiAnnotation",
     "RepairOptions",
     "SelectionMatch",
     "SelectionResult",
     "StageOptions",
+    "StepReadOptions",
     "Tessellation",
+    "Tolerance",
     "__version__",
     "convert",
     "lods",

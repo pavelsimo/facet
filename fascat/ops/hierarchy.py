@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 
 from fascat.asset import Asset, Node, Part, identity_transform
 from fascat.mesh import Mesh
+from fascat.metadata import Metadata
 from fascat.options import MergeOptions
 
 FloatArray = NDArray[np.float64]
@@ -315,7 +316,7 @@ def _material_indices(face_material_ids: list[str | None], material_index_by_id:
     return np.asarray([material_index_by_id[material_id] for material_id in material_ids], dtype=np.int64)
 
 
-def _part_metadata(inputs: tuple[_MergeInput, ...], policy: str) -> dict[str, str]:
+def _part_metadata(inputs: tuple[_MergeInput, ...], policy: str) -> Metadata:
     if policy == "drop":
         return {}
     source_part_ids = sorted({merge_input.occurrence.part.id for merge_input in inputs})
@@ -342,7 +343,7 @@ def _part_metadata(inputs: tuple[_MergeInput, ...], policy: str) -> dict[str, st
     }
 
 
-def _mesh_metadata(inputs: tuple[_MergeInput, ...]) -> dict[str, str]:
+def _mesh_metadata(inputs: tuple[_MergeInput, ...]) -> Metadata:
     return {
         "merged_occurrences": str(len({merge_input.occurrence.node.id for merge_input in inputs})),
         "merged_parts": str(len({merge_input.occurrence.part.id for merge_input in inputs})),

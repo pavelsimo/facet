@@ -8,6 +8,7 @@ from typing import Any, cast
 import numpy as np
 from numpy.typing import NDArray
 
+from fascat.metadata import Metadata
 from fascat.options import RepairOptions
 
 FloatArray = NDArray[np.float64]
@@ -38,7 +39,7 @@ class Mesh:
     uvs: dict[int, FloatArray] = field(default_factory=dict)
     material_indices: IntArray | None = None
     face_groups: dict[str, IntArray] = field(default_factory=dict)
-    metadata: dict[str, str] = field(default_factory=dict)
+    metadata: Metadata = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.points = np.array(self.points, dtype=np.float64, copy=True)

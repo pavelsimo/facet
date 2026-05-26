@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 
 from fascat.material import Material
 from fascat.mesh import Mesh
+from fascat.metadata import Metadata, PmiAnnotation
 from fascat.options import LODOptions, MergeOptions, OptimizeOptions, RepairOptions, StageOptions, Tessellation
 from fascat.report import Report, timed_step
 
@@ -26,7 +27,7 @@ class Node:
     children: list[Node] = field(default_factory=list)
     part_id: str | None = None
     transform: Transform = field(default_factory=identity_transform)
-    metadata: dict[str, str] = field(default_factory=dict)
+    metadata: Metadata = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.children = [child.copy() for child in self.children]
@@ -69,7 +70,7 @@ class Part:
     source_shape: object | None = None
     mesh: Mesh | None = None
     material_ids: list[str] = field(default_factory=list)
-    metadata: dict[str, str] = field(default_factory=dict)
+    metadata: Metadata = field(default_factory=dict)
     fingerprint: str | None = None
     lod_meshes: list[Mesh] = field(default_factory=list)
 
@@ -114,12 +115,16 @@ class Asset:
     meters_per_unit: float = 0.001
     up_axis: Literal["Y", "Z"] = "Z"
     source_path: Path | None = None
+    metadata: Metadata = field(default_factory=dict)
+    pmi: list[PmiAnnotation] = field(default_factory=list)
     report: Report = field(default_factory=Report)
 
     def __post_init__(self) -> None:
         self.root = self.root.copy()
         self.parts = {part_id: part.copy(keep_source=True) for part_id, part in self.parts.items()}
         self.materials = {material_id: material.copy() for material_id, material in self.materials.items()}
+        self.metadata = dict(self.metadata)
+        self.pmi = [annotation for annotation in self.pmi]
         self.report = self.report.copy()
 
     @property
@@ -166,6 +171,8 @@ class Asset:
             meters_per_unit=self.meters_per_unit,
             up_axis=self.up_axis,
             source_path=self.source_path,
+            metadata=dict(self.metadata),
+            pmi=list(self.pmi),
             report=self.report.copy(),
         )
 
@@ -393,6 +400,8 @@ class Asset:
             "root": self.root.to_dict(),
             "parts": {part_id: part.to_dict() for part_id, part in self.parts.items()},
             "materials": {material_id: material.to_dict() for material_id, material in self.materials.items()},
+            "metadata": dict(self.metadata),
+            "pmi": [annotation.to_dict() for annotation in self.pmi],
             "report": self.report.to_dict(),
         }
 

@@ -128,14 +128,35 @@ def _build_document(asset: Asset, *, binary_uri: bool) -> tuple[dict[str, Any], 
     meshes: list[dict[str, Any]] = []
     part_meshes: dict[str, int] = {}
     part_lods: dict[str, list[int]] = {}
+    pmi_by_part = _pmi_by_part(asset)
 
     for part in asset.parts.values():
         if part.mesh is None:
             continue
-        part_meshes[part.id] = _append_mesh(builder, meshes, part, part.mesh, material_indices, export_space, lod=0)
+        part_meshes[part.id] = _append_mesh(
+            builder,
+            meshes,
+            part,
+            part.mesh,
+            material_indices,
+            export_space,
+            lod=0,
+            pmi_ids=pmi_by_part.get(part.id, []),
+        )
         lod_indices: list[int] = []
         for lod, lod_mesh in enumerate(part.lod_meshes, start=1):
-            lod_indices.append(_append_mesh(builder, meshes, part, lod_mesh, material_indices, export_space, lod=lod))
+            lod_indices.append(
+                _append_mesh(
+                    builder,
+                    meshes,
+                    part,
+                    lod_mesh,
+                    material_indices,
+                    export_space,
+                    lod=lod,
+                    pmi_ids=pmi_by_part.get(part.id, []),
+                )
+            )
         if lod_indices:
             part_lods[part.id] = lod_indices
 
@@ -162,6 +183,8 @@ def _build_document(asset: Asset, *, binary_uri: bool) -> tuple[dict[str, Any], 
                 "sourceUpAxis": asset.up_axis,
                 "exportUnits": "metre",
                 "exportUpAxis": "Y",
+                "metadata": dict(asset.metadata),
+                "pmi": [annotation.to_dict() for annotation in asset.pmi],
             }
         },
     }
@@ -183,7 +206,7 @@ def _write_materials(materials: dict[str, Material]) -> dict[str, dict[str, Any]
                 "metallicFactor": material.metallic,
                 "roughnessFactor": material.roughness,
             },
-            "extras": {"fascat": {"materialId": material.id}},
+            "extras": {"fascat": {"materialId": material.id, "metadata": dict(material.metadata)}},
         }
         if material.opacity < 1.0 or material.base_color[3] < 1.0:
             gltf_material["alphaMode"] = "BLEND"
@@ -201,6 +224,7 @@ def _append_mesh(
     export_space: _ExportSpace,
     *,
     lod: int,
+    pmi_ids: list[str],
 ) -> int:
     mesh.validate()
     points = _points_to_export_space(mesh.points, export_space.linear).astype(np.float32)
@@ -264,7 +288,15 @@ def _append_mesh(
     gltf_mesh: dict[str, Any] = {
         "name": f"{part.name or part.id}_lod{lod}",
         "primitives": primitives,
-        "extras": {"fascat": {"partId": part.id, "originalName": part.name, "lod": lod}},
+        "extras": {
+            "fascat": {
+                "partId": part.id,
+                "originalName": part.name,
+                "lod": lod,
+                "metadata": dict(part.metadata),
+                "pmiIds": list(pmi_ids),
+            }
+        },
     }
     meshes.append(gltf_mesh)
     return len(meshes) - 1
@@ -291,7 +323,7 @@ def _append_node(
 ) -> int:
     gltf_node: dict[str, Any] = {
         "name": node.name or node.id,
-        "extras": {"fascat": {"nodeId": node.id, **node.metadata}},
+        "extras": {"fascat": {"nodeId": node.id, **node.metadata, "metadata": dict(node.metadata)}},
     }
     transform = _matrix_to_export_space(node.transform, export_space)
     if not np.allclose(transform, np.eye(4)):
@@ -307,6 +339,14 @@ def _append_node(
     if children:
         gltf_node["children"] = children
     return index
+
+
+def _pmi_by_part(asset: Asset) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for annotation in asset.pmi:
+        for target in annotation.applies_to:
+            result.setdefault(target, []).append(annotation.id)
+    return result
 
 
 def _export_space(asset: Asset) -> _ExportSpace:

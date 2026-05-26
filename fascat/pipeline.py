@@ -18,6 +18,7 @@ from fascat.options import (
     MergeOptions,
     OptimizeOptions,
     StageOptions,
+    StepReadOptions,
     Tessellation,
     UVMode,
 )
@@ -32,6 +33,7 @@ def convert(
     output_path: str | Path,
     *,
     profile: str | ConversionProfile = "realtime-desktop",
+    import_options: StepReadOptions | None = None,
     tessellation: Tessellation | None = None,
     stage: StageOptions | None = None,
     merge: MergeOptions | None = None,
@@ -46,7 +48,7 @@ def convert(
     if debug and output_format != "usd":
         raise ValueError("--debug is only supported for .usd or .usda exports")
     selected = profiles.by_name(profile) if isinstance(profile, str) else profile
-    asset = read_step(input_path)
+    asset = read_step(input_path, options=import_options) if import_options is not None else read_step(input_path)
     if progress is not None:
         progress("source", asset.stats())
     tessellation_options = tessellation or selected.tessellation

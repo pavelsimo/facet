@@ -49,6 +49,8 @@ fascat inspect input.step --json
 | `--uv0` | `box` | UV0 generation mode: `none`, `box`, or `unwrap` |
 | `--uv1` | `none` | UV1 generation mode: `none`, `box`, or `unwrap` |
 | `--materials` | `cad` | Material staging mode: `cad`, `display`, or `none` |
+| `--metadata` | `full` | Metadata import/export mode: `none`, `summary`, or `full` |
+| `--pmi` | `metadata` | PMI import/export mode: `none`, `metadata`, or `metadata-and-visuals` |
 | `--filter` | unset | Scope optimization and LOD work with a selector such as `path=*/Fasteners/*` |
 | `--exclude-filter` | unset | Exclude selector matches from `--filter` results |
 | `--merge` | `false` | Merge selected geometry before optimization |
@@ -69,6 +71,8 @@ fascat inspect input.step --json
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--profile` | `inspect-only` | Inspection profile to show in output |
+| `--metadata` | `summary` | Metadata output mode: `none`, `summary`, or `full` |
+| `--pmi` | `summary` | PMI output mode: `none`, `summary`, `full`, `metadata`, or `metadata-and-visuals` |
 | `--filter` | unset | Report matched assembly nodes and parts |
 | `--exclude-filter` | unset | Exclude selector matches from `--filter` results |
 

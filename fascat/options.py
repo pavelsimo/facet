@@ -60,6 +60,19 @@ class RepairOptions:
 
 
 @dataclass(frozen=True)
+class StepReadOptions:
+    metadata: bool = True
+    product_metadata: bool = True
+    properties: bool = True
+    layers: bool = True
+    validation_properties: bool = True
+    pmi: bool = True
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class StageOptions:
     materials: Literal["cad", "display", "none"] = "cad"
     normals: bool = True

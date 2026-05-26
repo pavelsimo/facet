@@ -40,6 +40,8 @@ fascat convert motor.step - --dry-run
 fascat inspect motor.step \
   --filter 'path=*/Fasteners/*' \
   --filter 'name=Bolt*' \
+  --metadata full \
+  --pmi summary \
   --json
 
 fascat convert motor.step motor.glb \

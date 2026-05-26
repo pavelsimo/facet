@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from math import isfinite
 
+from fascat.metadata import Metadata
+
 
 @dataclass(frozen=True)
 class Material:
@@ -12,7 +14,7 @@ class Material:
     metallic: float = 0.0
     roughness: float = 0.5
     opacity: float = 1.0
-    metadata: dict[str, str] = field(default_factory=dict)
+    metadata: Metadata = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "metadata", dict(self.metadata))

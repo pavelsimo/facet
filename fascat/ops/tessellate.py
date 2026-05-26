@@ -7,6 +7,7 @@ import numpy as np
 from fascat._ocp import shape_fingerprint
 from fascat.asset import Asset
 from fascat.mesh import Mesh
+from fascat.metadata import Metadata
 from fascat.options import Tessellation
 
 
@@ -120,11 +121,11 @@ def tessellate_shape(
     return mesh
 
 
-def _face_material_indices_from_metadata(metadata: dict[str, str]) -> list[int] | None:
+def _face_material_indices_from_metadata(metadata: Metadata) -> list[int] | None:
     value = metadata.get("occt_face_material_indices")
     if not value:
         return None
-    return [int(item) for item in value.split(",") if item]
+    return [int(item) for item in str(value).split(",") if item]
 
 
 def _tessellation_cache_key(

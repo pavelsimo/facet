@@ -119,6 +119,41 @@ asset = asset.merge(
 
 Merge modes include `all`, `by_material`, `by_node_name`, `by_part_name`, `hierarchy_level`, `parent_children`, `final_level`, and `regions`. Merging bakes node transforms into merged vertex positions, keeps material slots when requested, removes replaced empty nodes, and records before/after `draw_calls` in the merge report step.
 
+## Metadata and PMI
+
+Fascat keeps top-level asset metadata and typed PMI records alongside node, part, material, and mesh metadata.
+
+```python
+import fascat as fc
+
+asset = fc.read_step(
+    "motor.step",
+    options=fc.StepReadOptions(
+        metadata=True,
+        product_metadata=True,
+        properties=True,
+        layers=True,
+        validation_properties=True,
+        pmi=True,
+    ),
+)
+
+asset.metadata["review_state"] = "approved"
+asset.pmi.append(
+    fc.PmiAnnotation(
+        id="pmi_001",
+        kind="dimension",
+        text="25.4 +/-0.1",
+        value=25.4,
+        unit="millimetre",
+        tolerance=fc.Tolerance(upper=0.1, lower=0.0),
+        applies_to=["part_123"],
+    )
+)
+```
+
+glTF export writes metadata and PMI into `extras.fascat`. USD export writes Fascat metadata into `customData` on the scene, nodes, prototypes, materials, meshes, and `/PMI/*` annotation prims.
+
 ## One-shot conversion
 
 Use `fc.convert()` when you want the full default pipeline and output validation in one call.

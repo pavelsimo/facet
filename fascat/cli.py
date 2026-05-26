@@ -18,7 +18,7 @@ from fascat import __version__
 from fascat.filter import Filter, FilterExpressionError
 from fascat.io.gltf import GLTF_SUFFIXES
 from fascat.io.step import read_step, read_step_bytes
-from fascat.options import LODOptions, MergeOptions, OptimizeOptions, StageOptions, Tessellation
+from fascat.options import LODOptions, MergeOptions, OptimizeOptions, StageOptions, StepReadOptions, Tessellation
 from fascat.pipeline import convert
 from fascat.pipeline import validate_output as validate_export
 from fascat.profiles import by_name
@@ -109,6 +109,20 @@ class MergeStrategy(str, Enum):
     BY_MATERIAL = "by-material"
 
 
+class MetadataMode(str, Enum):
+    NONE = "none"
+    SUMMARY = "summary"
+    FULL = "full"
+
+
+class PmiMode(str, Enum):
+    NONE = "none"
+    SUMMARY = "summary"
+    FULL = "full"
+    METADATA = "metadata"
+    METADATA_AND_VISUALS = "metadata-and-visuals"
+
+
 @dataclass(frozen=True)
 class CliState:
     verbose: bool
@@ -180,6 +194,14 @@ def cmd_inspect(
     ctx: typer.Context,
     input_path: Annotated[Path, typer.Argument(help="STEP file to inspect, or '-' for stdin.", allow_dash=True)],
     profile: Annotated[Profile, typer.Option("--profile", help="Inspection profile to apply.")] = Profile.INSPECT_ONLY,
+    metadata: Annotated[
+        MetadataMode,
+        typer.Option("--metadata", help="Metadata output mode: none, summary, or full."),
+    ] = MetadataMode.SUMMARY,
+    pmi: Annotated[
+        PmiMode,
+        typer.Option("--pmi", help="PMI output mode: none, summary, full, metadata, or metadata-and-visuals."),
+    ] = PmiMode.SUMMARY,
     filters: Annotated[
         list[str] | None,
         typer.Option("--filter", help="Scope inspection with a selector such as path=*/Fasteners/* or triangles<=12."),
@@ -195,6 +217,8 @@ def cmd_inspect(
         "command": "inspect",
         "input": str(input_path),
         "profile": profile.value,
+        "metadata": metadata.value,
+        "pmi": pmi.value,
         "filters": filters or [],
         "exclude_filters": exclude_filters or [],
         "dry_run": state.dry_run,
@@ -205,7 +229,8 @@ def cmd_inspect(
         _emit(ctx, payload, f"Would inspect {input_path} with profile {profile.value}.")
         return
 
-    asset = _read_step_for_cli(input_path, ctx, payload)
+    import_options = _step_read_options(metadata, pmi)
+    asset = _read_step_for_cli(input_path, ctx, payload, import_options=import_options)
     profile_options = by_name(profile.value)
     selection = asset.select(where) if where is not None else None
     result = {
@@ -218,8 +243,14 @@ def cmd_inspect(
         "root": asset.root.to_dict(),
         "parts": [part.to_dict() for part in asset.parts.values()],
         "materials": [material.to_dict() for material in asset.materials.values()],
+        "metadata_summary": _metadata_summary(asset),
+        "pmi_summary": _pmi_summary(asset),
         "report": asset.report.to_dict(),
     }
+    if metadata == MetadataMode.FULL:
+        result["asset_metadata"] = dict(asset.metadata)
+    if pmi in {PmiMode.FULL, PmiMode.METADATA, PmiMode.METADATA_AND_VISUALS}:
+        result["pmi"] = [annotation.to_dict() for annotation in asset.pmi]
     if selection is not None:
         result["selection"] = selection.to_dict()
     message = f"{input_path}: {_format_stats(asset.stats())}; units={asset.units}"
@@ -275,6 +306,14 @@ def cmd_convert(
         MaterialMode,
         typer.Option("--materials", help="Material staging mode: cad, display, or none."),
     ] = MaterialMode.CAD,
+    metadata: Annotated[
+        MetadataMode,
+        typer.Option("--metadata", help="Metadata import/export mode: none, summary, or full."),
+    ] = MetadataMode.FULL,
+    pmi: Annotated[
+        PmiMode,
+        typer.Option("--pmi", help="PMI import/export mode: none, metadata, or metadata-and-visuals."),
+    ] = PmiMode.METADATA,
     merge: Annotated[bool, typer.Option("--merge", help="Merge selected geometry before optimization.")] = False,
     merge_mode: Annotated[MergeMode, typer.Option("--merge-mode", help="Merge grouping mode.")] = MergeMode.ALL,
     keep_parent: Annotated[
@@ -338,6 +377,8 @@ def cmd_convert(
         "uv0": uv0.value,
         "uv1": uv1.value,
         "materials": materials.value,
+        "metadata": metadata.value,
+        "pmi": pmi.value,
         "merge": merge,
         "merge_mode": merge_mode.value,
         "keep_parent": keep_parent,
@@ -412,6 +453,7 @@ def cmd_convert(
                 preserve_instances=preserve_instances,
             )
         stage_options = replace(profile_options.stage, materials=materials.value, uv0=uv0.value, uv1=uv1.value)
+        import_options = _step_read_options(metadata, pmi)
         merge_options = (
             MergeOptions(
                 mode=cast(Any, merge_mode.value.replace("-", "_")),
@@ -432,6 +474,7 @@ def cmd_convert(
             profile=profile.value,
             tessellation=tessellation,
             stage=stage_options,
+            import_options=import_options,
             merge=merge_options,
             optimize=optimize_options,
             lods=lod_options,
@@ -618,6 +661,35 @@ def _parse_filter_options(
     raise AssertionError("unreachable")
 
 
+def _step_read_options(metadata: MetadataMode, pmi: PmiMode) -> StepReadOptions:
+    metadata_enabled = metadata != MetadataMode.NONE
+    pmi_enabled = pmi != PmiMode.NONE
+    return StepReadOptions(
+        metadata=metadata_enabled,
+        product_metadata=metadata_enabled,
+        properties=metadata_enabled,
+        layers=metadata_enabled,
+        validation_properties=metadata_enabled,
+        pmi=pmi_enabled,
+    )
+
+
+def _metadata_summary(asset: Any) -> dict[str, int]:
+    return {
+        "asset": len(asset.metadata),
+        "nodes": sum(len(node.metadata) for node in asset.root.walk()),
+        "parts": sum(len(part.metadata) for part in asset.parts.values()),
+        "materials": sum(len(material.metadata) for material in asset.materials.values()),
+    }
+
+
+def _pmi_summary(asset: Any) -> dict[str, int]:
+    kinds: dict[str, int] = {}
+    for annotation in asset.pmi:
+        kinds[annotation.kind] = kinds.get(annotation.kind, 0) + 1
+    return {"count": len(asset.pmi), **{f"kind_{kind}": count for kind, count in sorted(kinds.items())}}
+
+
 def _validate_step_input(path: Path, ctx: typer.Context, payload: dict[str, Any]) -> None:
     if not _is_stdio(path) and path.suffix.lower() not in STEP_SUFFIXES:
         _fail(ctx, payload, f"Unsupported STEP extension: {path.suffix or '<none>'}. Use .step or .stp.", code=2)
@@ -645,15 +717,21 @@ def _fail(ctx: typer.Context, payload: dict[str, Any], message: str, code: int =
     raise typer.Exit(code)
 
 
-def _read_step_for_cli(path: Path, ctx: typer.Context, payload: dict[str, Any]) -> Any:
+def _read_step_for_cli(
+    path: Path,
+    ctx: typer.Context,
+    payload: dict[str, Any],
+    *,
+    import_options: StepReadOptions | None = None,
+) -> Any:
     if _is_stdio(path):
         data = sys.stdin.buffer.read()
         if not data:
             _fail(ctx, payload, "Missing input data on stdin.")
-        return read_step_bytes(data)
+        return read_step_bytes(data, options=import_options)
     _require_existing_file(path, "input", ctx, payload)
     try:
-        return read_step(path)
+        return read_step(path, options=import_options)
     except Exception as exc:
         _fail(ctx, payload, str(exc))
         raise AssertionError("unreachable") from exc
@@ -666,6 +744,7 @@ def _convert_for_cli(
     profile: str,
     tessellation: Tessellation,
     stage: StageOptions,
+    import_options: StepReadOptions,
     merge: MergeOptions | None,
     optimize: OptimizeOptions | None,
     lods: LODOptions | None,
@@ -679,10 +758,32 @@ def _convert_for_cli(
             raise RuntimeError("Missing input data on stdin.")
         with _temporary_step_file(data) as temp_input:
             return _convert_output(
-                temp_input, output_path, profile, tessellation, stage, merge, optimize, lods, where, progress, debug
+                temp_input,
+                output_path,
+                profile,
+                tessellation,
+                stage,
+                import_options,
+                merge,
+                optimize,
+                lods,
+                where,
+                progress,
+                debug,
             )
     return _convert_output(
-        input_path, output_path, profile, tessellation, stage, merge, optimize, lods, where, progress, debug
+        input_path,
+        output_path,
+        profile,
+        tessellation,
+        stage,
+        import_options,
+        merge,
+        optimize,
+        lods,
+        where,
+        progress,
+        debug,
     )
 
 
@@ -692,6 +793,7 @@ def _convert_output(
     profile: str,
     tessellation: Tessellation,
     stage: StageOptions,
+    import_options: StepReadOptions,
     merge: MergeOptions | None,
     optimize: OptimizeOptions | None,
     lods: LODOptions | None,
@@ -709,6 +811,7 @@ def _convert_output(
                 input_path,
                 handle.name,
                 profile=profile,
+                import_options=import_options,
                 tessellation=tessellation,
                 stage=stage,
                 merge=merge,
@@ -726,6 +829,7 @@ def _convert_output(
         input_path,
         output_path,
         profile=profile,
+        import_options=import_options,
         tessellation=tessellation,
         stage=stage,
         merge=merge,

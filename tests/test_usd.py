@@ -155,6 +155,48 @@ def test_usd_export_authors_mesh_material_units_and_lods(tmp_path: Path) -> None
     assert tuple(extent[1]) == (1.0, 1.0, 1.0)
 
 
+def test_usd_export_authors_metadata_and_pmi_custom_data(tmp_path: Path) -> None:
+    mesh = cube_mesh()
+    asset = Asset(
+        root=Node(
+            id="root",
+            name="root",
+            metadata={"assembly": "demo"},
+            children=[Node(id="node", name="Cube", part_id="cube", metadata={"step_label": "0:1"})],
+        ),
+        parts={
+            "cube": Part(
+                id="cube",
+                name="Cube",
+                mesh=mesh,
+                metadata={"layer": "A"},
+            )
+        },
+        materials={},
+        metadata={"document": "demo.step"},
+        pmi=[fc.PmiAnnotation(id="pmi_001", kind="dimension", text="10", applies_to=["cube"])],
+    )
+    output = tmp_path / "metadata.usda"
+
+    write_usd(asset, output)
+
+    stage = Usd.Stage.Open(str(output))
+    assert stage is not None
+    scene = stage.GetPrimAtPath("/Scene")
+    prototype = next(
+        prim for prim in Usd.PrimRange(stage.GetPrimAtPath("/__Prototypes")) if prim.GetName() != "__Prototypes"
+    )
+    node = stage.GetPrimAtPath("/Scene/Cube")
+    pmi = stage.GetPrimAtPath("/PMI/pmi_001")
+
+    assert scene.GetCustomDataByKey("fascat:metadata")["document"] == "demo.step"
+    assert node.GetCustomDataByKey("fascat:metadata")["step_label"] == "0:1"
+    assert prototype.GetCustomDataByKey("fascat:metadata")["layer"] == "A"
+    assert prototype.GetCustomDataByKey("fascat:pmiIds") == ["pmi_001"]
+    assert pmi.GetCustomDataByKey("fascat:type") == "dimension"
+    assert pmi.GetCustomDataByKey("fascat:appliesTo") == ["cube"]
+
+
 def test_usd_export_writes_binary_usdc(tmp_path: Path) -> None:
     mesh = cube_mesh()
     asset = Asset(

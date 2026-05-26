@@ -9,24 +9,26 @@ import numpy as np
 from fascat._ocp import shape_fingerprint as _shape_fingerprint
 from fascat.asset import Asset, Node, Part
 from fascat.material import Material
+from fascat.metadata import Metadata
+from fascat.options import StepReadOptions
 from fascat.report import Report, timed_step
 
 _PartIndex = dict[tuple[str, str, str, str], str]
 
 
-def read_step(path: str | Path) -> Asset:
+def read_step(path: str | Path, *, options: StepReadOptions | None = None) -> Asset:
     source = Path(path)
-    return _read_step_path(source, source_identity=str(source.resolve()))
+    return _read_step_path(source, source_identity=str(source.resolve()), options=options or StepReadOptions())
 
 
-def _read_step_path(source: Path, *, source_identity: str) -> Asset:
+def _read_step_path(source: Path, *, source_identity: str, options: StepReadOptions) -> Asset:
     if not source.exists():
         raise FileNotFoundError(f"missing STEP file: {source}")
     if source.suffix.lower() not in {".step", ".stp"}:
         raise ValueError(f"unsupported STEP extension: {source.suffix or '<none>'}")
 
     with timed_step() as timer:
-        document, shape_tool, color_tool, unit_name, meters_per_unit = _read_xde_document(source)
+        document, shape_tool, color_tool, unit_name, meters_per_unit = _read_xde_document(source, options)
         free_labels = _free_shape_labels(shape_tool)
         root = Node(
             id=_stable_id("node", f"{source_identity}:root"),
@@ -59,12 +61,22 @@ def _read_step_path(source: Path, *, source_identity: str) -> Asset:
         meters_per_unit=meters_per_unit,
         up_axis="Z",
         source_path=source,
+        metadata=_asset_metadata(source, source_identity, unit_name, meters_per_unit, options),
+        pmi=[],
         report=report,
     )
     asset.report.input_stats = asset.stats()
+    metadata_count = _metadata_count(asset)
     asset.report.add_step(
         "import",
-        options={"format": "STEP", "backend": "OCP"},
+        options={
+            "format": "STEP",
+            "backend": "OCP",
+            "read_options": options.to_dict(),
+            "metadata_count": metadata_count,
+            "pmi_count": len(asset.pmi),
+            "unsupported_pmi_count": 0,
+        },
         before={"nodes": 0, "parts": 0, "occurrences": 0, "materials": 0, "vertices": 0, "triangles": 0},
         after=asset.stats(),
         duration=timer.duration,
@@ -73,18 +85,21 @@ def _read_step_path(source: Path, *, source_identity: str) -> Asset:
     return asset
 
 
-def read_step_bytes(data: bytes, *, name: str = "stdin.step") -> Asset:
+def read_step_bytes(data: bytes, *, name: str = "stdin.step", options: StepReadOptions | None = None) -> Asset:
     with tempfile.NamedTemporaryFile(suffix=Path(name).suffix or ".step") as handle:
         handle.write(data)
         handle.flush()
-        asset = _read_step_path(Path(handle.name), source_identity=name)
+        asset = _read_step_path(Path(handle.name), source_identity=name, options=options or StepReadOptions())
     asset.source_path = None
     asset.report.source_path = None
     asset.root.metadata["source"] = name
+    if asset.metadata:
+        asset.metadata["source"] = name
+        asset.metadata["source_identity"] = name
     return asset
 
 
-def _read_xde_document(path: Path) -> tuple[Any, Any, Any, str, float]:
+def _read_xde_document(path: Path, options: StepReadOptions) -> tuple[Any, Any, Any, str, float]:
     try:
         from OCP.IFSelect import IFSelect_RetDone
         from OCP.STEPCAFControl import STEPCAFControl_Reader
@@ -100,11 +115,11 @@ def _read_xde_document(path: Path) -> tuple[Any, Any, Any, str, float]:
     app.NewDocument(TCollection_ExtendedString("MDTV-XCAF"), document)
 
     reader = STEPCAFControl_Reader()
-    reader.SetNameMode(True)
+    reader.SetNameMode(options.metadata)
     reader.SetColorMode(True)
     reader.SetMatMode(True)
-    reader.SetMetaMode(True)
-    reader.SetProductMetaMode(True)
+    reader.SetMetaMode(options.metadata or options.properties)
+    reader.SetProductMetaMode(options.product_metadata)
     status = reader.ReadFile(str(path))
     if status != IFSelect_RetDone:
         raise RuntimeError(f"failed to read STEP file: {path}")
@@ -123,6 +138,33 @@ def _free_shape_labels(shape_tool: Any) -> list[Any]:
     labels = TDF_LabelSequence()
     shape_tool.GetFreeShapes(labels)
     return [labels.Value(index) for index in range(labels.Lower(), labels.Upper() + 1)]
+
+
+def _asset_metadata(
+    source: Path,
+    source_identity: str,
+    unit_name: str,
+    meters_per_unit: float,
+    options: StepReadOptions,
+) -> Metadata:
+    if not options.metadata:
+        return {}
+    return {
+        "source": str(source),
+        "source_identity": source_identity,
+        "units": unit_name,
+        "meters_per_unit": meters_per_unit,
+        "metadata_options": options.to_dict(),
+    }
+
+
+def _metadata_count(asset: Asset) -> int:
+    return (
+        len(asset.metadata)
+        + sum(len(node.metadata) for node in asset.root.walk())
+        + sum(len(part.metadata) for part in asset.parts.values())
+        + sum(len(material.metadata) for material in asset.materials.values())
+    )
 
 
 def _build_node(
@@ -197,7 +239,7 @@ def _build_node(
         _ensure_material(materials, material_id, color)
         for face_material_id, face_color in face_material_colors.items():
             _ensure_material(materials, face_material_id, face_color)
-        metadata = {
+        metadata: Metadata = {
             "step_label": part_entry,
             "occurrence_label": label_entry,
             "source_identity": source_identity,
