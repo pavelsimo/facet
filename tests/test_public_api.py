@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 import fascat as fc
 
@@ -77,6 +78,27 @@ def test_functional_write_usd_records_report_step(monkeypatch, tmp_path: Path) -
     assert calls == {"asset": asset, "path": output, "debug": True}
     assert step.name == "write"
     assert step.options == {"format": "OpenUSD", "debug": True}
+    assert asset.report.finished_at is not None
+
+
+def test_functional_write_usd_attaches_failure_report(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    import fascat.io.usd as usd
+
+    asset = fc.Asset(root=fc.Node(id="root", name="root"))
+
+    def fail_write_usd(_asset: fc.Asset, _path: str | Path, *, debug: bool = False) -> None:
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(usd, "write_usd", fail_write_usd)
+
+    with pytest.raises(RuntimeError, match="disk full") as error:
+        fc.write_usd(asset, tmp_path / "output.usda")
+
+    step = asset.report.steps[-1]
+    assert error.value.report is asset.report
+    assert asset.report.errors == ["disk full"]
+    assert step.name == "write"
+    assert step.after == asset.stats()
     assert asset.report.finished_at is not None
 
 
