@@ -701,6 +701,7 @@ Pipeline tests:
 - Repeated parts can be preserved or duplicated per occurrence.
 - Optimization tests assert target triangle budgets take precedence over ratio.
 - Functional API wrappers cover stage, optimize, and LOD operations.
+- Public node dictionaries preserve transforms.
 
 USD tests:
 
@@ -711,6 +712,7 @@ USD tests:
 - Assert face counts, indices, and points are valid.
 - Assert materials bind correctly.
 - Assert UV0 primvars, normals, and sanitized-name original metadata are authored.
+- Assert non-identity node transforms are authored as USD Xform ops.
 - Assert `displayColor` fallback is authored.
 - Assert per-face material subsets are authored when material indices require them.
 - Assert LOD variants exist with `lod0` selected when requested.

@@ -82,10 +82,14 @@ def test_usd_export_authors_mesh_material_units_and_lods(tmp_path: Path) -> None
 
 def test_usd_export_authors_uv0_normals_and_original_names(tmp_path: Path) -> None:
     mesh = cube_mesh()
+    transform = np.eye(4, dtype=float)
+    transform[0, 0] = 2.0
+    transform[1, 1] = 3.0
+    transform[2, 2] = 4.0
     root = Node(
         id="root",
         name="root",
-        children=[Node(id="node", name="123 motor housing!", part_id="part")],
+        children=[Node(id="node", name="123 motor housing!", part_id="part", transform=transform)],
     )
     asset = Asset(
         root=root,
@@ -101,6 +105,9 @@ def test_usd_export_authors_uv0_normals_and_original_names(tmp_path: Path) -> No
     xform_prim = stage.GetPrimAtPath("/Scene/_123_motor_housing")
     assert xform_prim
     assert xform_prim.GetCustomDataByKey("fascat:originalName") == "123 motor housing!"
+    xform_ops = UsdGeom.Xformable(xform_prim).GetOrderedXformOps()
+    assert len(xform_ops) == 1
+    assert np.allclose(np.asarray(xform_ops[0].Get()), transform)
 
     mesh_prim = stage.GetPrimAtPath("/Scene/_123_motor_housing/Mesh")
     usd_mesh = UsdGeom.Mesh(mesh_prim)

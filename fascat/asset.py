@@ -49,6 +49,7 @@ class Node:
             "id": self.id,
             "name": self.name,
             "part_id": self.part_id,
+            "transform": self.transform.tolist(),
             "children": [child.to_dict() for child in self.children],
             "metadata": dict(self.metadata),
         }

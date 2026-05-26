@@ -24,3 +24,11 @@ def test_functional_api_wraps_asset_operations() -> None:
     assert part.mesh is not None
     assert sorted(part.mesh.uvs) == [0, 1]
     assert len(part.lod_meshes) == 1
+
+
+def test_node_to_dict_includes_transform() -> None:
+    transform = np.eye(4, dtype=float)
+    transform[0, 3] = 2.5
+    node = fc.Node(id="node", name="node", transform=transform)
+
+    assert node.to_dict()["transform"] == transform.tolist()
