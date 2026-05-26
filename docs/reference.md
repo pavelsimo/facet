@@ -72,6 +72,14 @@ fascat inspect input.step --json
 | `--merge-strategy` | `all` | Region merge strategy: `all` or `by-material` |
 | `--hierarchy-level` | `1` | Hierarchy level used by `--merge-mode hierarchy-level` |
 | `--preserve-instances / --no-preserve-instances` | `true` | Preserve repeated parts as shared instances, or duplicate per occurrence |
+| `--preserve-hard-edges` | `false` | Protect faces adjacent to hard edges during simplification |
+| `--hard-edge-angle` | `30` | Angle threshold for hard-edge preservation |
+| `--preserve-holes` | `false` | Protect open boundary faces during simplification |
+| `--preserve-material-boundaries` | `false` | Protect faces along material boundaries |
+| `--preserve-uv-seams` | `false` | Protect faces touching duplicated-position UV seams |
+| `--preserve-small-parts` | `false` | Skip simplification for small parts |
+| `--small-part-triangle-threshold` | `64` | Triangle threshold for `--preserve-small-parts` |
+| `--preserve-silhouette` | `false` | Protect faces on bounding-box silhouette extremes |
 | `--debug` | `false` | Require text `.usd` or `.usda` output for debugging |
 | `--report` | unset | Write a JSON conversion report sidecar |
 | `--force` | `false` | Overwrite an existing output file |

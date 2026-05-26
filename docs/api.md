@@ -51,6 +51,12 @@ asset = asset.optimize(
         preserve_instances=True,
         simplify=True,
         optimize_buffers=True,
+        preserve_hard_edges=False,
+        preserve_holes=False,
+        preserve_material_boundaries=False,
+        preserve_uv_seams=False,
+        preserve_small_parts=False,
+        preserve_silhouette=False,
     )
 )
 
@@ -206,6 +212,30 @@ quality = asset.tessellation_quality_report()
 ```
 
 `part_settings` keys match a part id or part name. Quality reports include per-part edge length, triangle area, aspect ratio, skinny triangle, boundary edge, and non-manifold edge counts.
+
+## Feature-Preserving Simplification
+
+Optimization can protect mechanical features while reducing triangle count. Preservation flags keep protected faces from being dropped when a target would otherwise remove them.
+
+```python
+asset = asset.optimize(
+    fc.OptimizeOptions(
+        target_triangles=500_000,
+        simplify=True,
+        preserve_instances=True,
+        preserve_hard_edges=True,
+        hard_edge_angle=30.0,
+        preserve_holes=True,
+        preserve_material_boundaries=True,
+        preserve_uv_seams=True,
+        preserve_small_parts=True,
+        small_part_triangle_threshold=64,
+        preserve_silhouette=True,
+    )
+)
+```
+
+Protected-feature counts are stored as part metadata under `simplification_preserved_features`. Parts below `small_part_triangle_threshold` are left unsimplified when `preserve_small_parts=True`.
 
 ## One-shot conversion
 

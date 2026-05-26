@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import math
 
 from fascat.asset import Asset, Part
+from fascat.mesh import Mesh
 from fascat.options import OptimizeOptions
 
 
@@ -22,11 +24,18 @@ def optimize_asset(asset: Asset, options: OptimizeOptions, *, selected_part_ids:
         total_triangles,
         options.target_triangles,
         selected_part_ids=selected_part_ids,
+        preserve_small_parts=options.preserve_small_parts,
+        small_part_triangle_threshold=options.small_part_triangle_threshold,
     )
     if targets is not None and sum(targets.values()) > (options.target_triangles or 0):
-        result.report.add_warning(
-            "target_triangles is lower than the number of non-empty unique meshes; using one triangle per mesh"
-        )
+        if options.preserve_small_parts:
+            result.report.add_warning(
+                "target_triangles is lower than the preserved feature minimum; preserving requested features"
+            )
+        else:
+            result.report.add_warning(
+                "target_triangles is lower than the number of non-empty unique meshes; using one triangle per mesh"
+            )
     for part in result.parts.values():
         if selected_part_ids is not None and part.id not in selected_part_ids:
             continue
@@ -34,9 +43,30 @@ def optimize_asset(asset: Asset, options: OptimizeOptions, *, selected_part_ids:
             continue
         mesh = part.mesh
         if options.simplify:
-            target = targets.get(part.id) if targets is not None else None
-            mesh = mesh.simplify(target_triangles=target, ratio=None if target is not None else options.ratio)
-            mesh.validate()
+            if _preserve_small_part(mesh, options):
+                part.metadata["simplification_preserved"] = "small_part"
+            else:
+                feature_counts = _feature_counts(mesh, options)
+                target = targets.get(part.id) if targets is not None else None
+                if _feature_preservation_enabled(options):
+                    mesh = mesh.simplify(
+                        target_triangles=target,
+                        ratio=None if target is not None else options.ratio,
+                        preserve_hard_edges=options.preserve_hard_edges,
+                        hard_edge_angle=options.hard_edge_angle,
+                        preserve_holes=options.preserve_holes,
+                        preserve_material_boundaries=options.preserve_material_boundaries,
+                        preserve_uv_seams=options.preserve_uv_seams,
+                        preserve_silhouette=options.preserve_silhouette,
+                    )
+                else:
+                    mesh = mesh.simplify(target_triangles=target, ratio=None if target is not None else options.ratio)
+                if feature_counts is not None:
+                    part.metadata["simplification_preserved_features"] = json.dumps(
+                        feature_counts,
+                        sort_keys=True,
+                    )
+                mesh.validate()
         if options.optimize_buffers:
             mesh = mesh.optimize_buffers()
             mesh.validate()
@@ -80,6 +110,8 @@ def _targets_for_parts(
     total_triangles: int,
     target_triangles: int | None,
     selected_part_ids: set[str] | None = None,
+    preserve_small_parts: bool = False,
+    small_part_triangle_threshold: int = 64,
 ) -> dict[str, int] | None:
     if target_triangles is None or total_triangles <= target_triangles or total_triangles == 0:
         return None
@@ -94,23 +126,34 @@ def _targets_for_parts(
     if not eligible:
         return None
 
-    minimum_total = len(eligible)
-    if target_triangles <= minimum_total:
-        return {part_id: 1 for part_id, _triangles in eligible}
+    preserved = {
+        part_id: triangle_count
+        for part_id, triangle_count in eligible
+        if preserve_small_parts and triangle_count <= small_part_triangle_threshold
+    }
+    remaining_eligible = [(part_id, count) for part_id, count in eligible if part_id not in preserved]
+    remaining_target = target_triangles - sum(preserved.values())
+    if not remaining_eligible:
+        return preserved
+
+    minimum_total = len(remaining_eligible)
+    if remaining_target <= minimum_total:
+        return {**preserved, **{part_id: 1 for part_id, _triangles in remaining_eligible}}
 
     targets: dict[str, int] = {}
     remainders: list[tuple[float, int, str]] = []
     assigned = 0
     exact_targets: dict[str, float] = {}
-    for part_id, triangle_count in eligible:
-        exact = target_triangles * (triangle_count / total_triangles)
+    remaining_triangles = sum(triangle_count for _part_id, triangle_count in remaining_eligible)
+    for part_id, triangle_count in remaining_eligible:
+        exact = remaining_target * (triangle_count / remaining_triangles)
         exact_targets[part_id] = exact
         base = max(1, int(math.floor(exact)))
         targets[part_id] = base
         assigned += base
         remainders.append((exact - base, triangle_count, part_id))
 
-    while assigned > target_triangles:
+    while assigned > remaining_target:
         removable = [
             (targets[part_id] - exact_targets[part_id], targets[part_id], part_id)
             for part_id in targets
@@ -122,10 +165,10 @@ def _targets_for_parts(
         targets[part_id] -= 1
         assigned -= 1
 
-    remaining = max(0, target_triangles - assigned)
+    remaining = max(0, remaining_target - assigned)
     for _remainder, _triangle_count, part_id in sorted(remainders, reverse=True)[:remaining]:
         targets[part_id] += 1
-    return targets
+    return {**preserved, **targets}
 
 
 def _selected_triangle_count(parts: dict[str, Part], selected_part_ids: set[str] | None) -> int:
@@ -133,4 +176,33 @@ def _selected_triangle_count(parts: dict[str, Part], selected_part_ids: set[str]
         part.mesh.triangle_count
         for part_id, part in parts.items()
         if (selected_part_ids is None or part_id in selected_part_ids) and part.mesh is not None
+    )
+
+
+def _feature_preservation_enabled(options: OptimizeOptions) -> bool:
+    return any(
+        (
+            options.preserve_hard_edges,
+            options.preserve_holes,
+            options.preserve_material_boundaries,
+            options.preserve_uv_seams,
+            options.preserve_silhouette,
+        )
+    )
+
+
+def _preserve_small_part(mesh: Mesh, options: OptimizeOptions) -> bool:
+    return options.preserve_small_parts and mesh.triangle_count <= options.small_part_triangle_threshold
+
+
+def _feature_counts(mesh: Mesh, options: OptimizeOptions) -> dict[str, int] | None:
+    if not _feature_preservation_enabled(options):
+        return None
+    return mesh.feature_preservation_counts(
+        preserve_hard_edges=options.preserve_hard_edges,
+        hard_edge_angle=options.hard_edge_angle,
+        preserve_holes=options.preserve_holes,
+        preserve_material_boundaries=options.preserve_material_boundaries,
+        preserve_uv_seams=options.preserve_uv_seams,
+        preserve_silhouette=options.preserve_silhouette,
     )

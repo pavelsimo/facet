@@ -429,6 +429,38 @@ def cmd_convert(
             help="Preserve repeated parts as shared instances.",
         ),
     ] = True,
+    preserve_hard_edges: Annotated[
+        bool,
+        typer.Option("--preserve-hard-edges", help="Protect faces adjacent to hard edges during simplification."),
+    ] = False,
+    hard_edge_angle: Annotated[
+        float,
+        typer.Option("--hard-edge-angle", help="Angle threshold for hard-edge preservation."),
+    ] = 30.0,
+    preserve_holes: Annotated[
+        bool,
+        typer.Option("--preserve-holes", help="Protect open boundary faces during simplification."),
+    ] = False,
+    preserve_material_boundaries: Annotated[
+        bool,
+        typer.Option("--preserve-material-boundaries", help="Protect faces along material boundaries."),
+    ] = False,
+    preserve_uv_seams: Annotated[
+        bool,
+        typer.Option("--preserve-uv-seams", help="Protect faces touching duplicated-position UV seams."),
+    ] = False,
+    preserve_small_parts: Annotated[
+        bool,
+        typer.Option("--preserve-small-parts", help="Skip simplification for small parts."),
+    ] = False,
+    small_part_triangle_threshold: Annotated[
+        int,
+        typer.Option("--small-part-triangle-threshold", help="Triangle threshold for --preserve-small-parts."),
+    ] = 64,
+    preserve_silhouette: Annotated[
+        bool,
+        typer.Option("--preserve-silhouette", help="Protect faces on bounding-box silhouette extremes."),
+    ] = False,
     debug: Annotated[bool, typer.Option("--debug", help="Prefer debuggable USDA output conventions.")] = False,
     report: Annotated[Path | None, typer.Option("--report", help="Write a JSON conversion report sidecar.")] = None,
     force: Annotated[bool, typer.Option("--force", "-f", help="Overwrite an existing output file.")] = False,
@@ -472,6 +504,14 @@ def cmd_convert(
         "filters": filters or [],
         "exclude_filters": exclude_filters or [],
         "preserve_instances": preserve_instances,
+        "preserve_hard_edges": preserve_hard_edges,
+        "hard_edge_angle": hard_edge_angle,
+        "preserve_holes": preserve_holes,
+        "preserve_material_boundaries": preserve_material_boundaries,
+        "preserve_uv_seams": preserve_uv_seams,
+        "preserve_small_parts": preserve_small_parts,
+        "small_part_triangle_threshold": small_part_triangle_threshold,
+        "preserve_silhouette": preserve_silhouette,
         "debug": debug,
         "report": str(report) if report else None,
         "force": force,
@@ -510,6 +550,10 @@ def cmd_convert(
         _fail(ctx, payload, "--region-size must be greater than 0.", code=2)
     if merge and merge_mode == MergeMode.REGIONS and region_size is None:
         _fail(ctx, payload, "--merge-mode regions requires --region-size.", code=2)
+    if hard_edge_angle <= 0.0 or hard_edge_angle > 180.0:
+        _fail(ctx, payload, "--hard-edge-angle must be greater than 0 and no more than 180.", code=2)
+    if small_part_triangle_threshold < 0:
+        _fail(ctx, payload, "--small-part-triangle-threshold must be greater than or equal to 0.", code=2)
     if debug and not _is_stdio(output_path) and output_path.suffix.lower() not in {".usd", ".usda"}:
         _fail(ctx, payload, "--debug requires .usd or .usda output.", code=2)
     if quality_report is not None and report is not None and quality_report.resolve() == report.resolve():
@@ -548,6 +592,14 @@ def cmd_convert(
                 else optimize_options.target_triangles,
                 ratio=ratio,
                 preserve_instances=preserve_instances,
+                preserve_hard_edges=preserve_hard_edges,
+                hard_edge_angle=hard_edge_angle,
+                preserve_holes=preserve_holes,
+                preserve_material_boundaries=preserve_material_boundaries,
+                preserve_uv_seams=preserve_uv_seams,
+                preserve_small_parts=preserve_small_parts,
+                small_part_triangle_threshold=small_part_triangle_threshold,
+                preserve_silhouette=preserve_silhouette,
             )
         stage_options = replace(profile_options.stage, materials=materials.value, uv0=uv0.value, uv1=uv1.value)
         import_options = _step_read_options(metadata, pmi)

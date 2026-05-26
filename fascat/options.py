@@ -161,12 +161,24 @@ class OptimizeOptions:
     preserve_instances: bool = True
     simplify: bool = True
     optimize_buffers: bool = True
+    preserve_hard_edges: bool = False
+    hard_edge_angle: float = 30.0
+    preserve_holes: bool = False
+    preserve_material_boundaries: bool = False
+    preserve_uv_seams: bool = False
+    preserve_small_parts: bool = False
+    small_part_triangle_threshold: int = 64
+    preserve_silhouette: bool = False
 
     def __post_init__(self) -> None:
         if self.target_triangles is not None and self.target_triangles <= 0:
             raise ValueError("target_triangles must be greater than 0 when set")
         if self.ratio is not None and (self.ratio <= 0.0 or self.ratio >= 1.0):
             raise ValueError("ratio must be greater than 0 and less than 1 when set")
+        if self.hard_edge_angle <= 0.0 or self.hard_edge_angle > 180.0:
+            raise ValueError("hard_edge_angle must be greater than 0 and no more than 180")
+        if self.small_part_triangle_threshold < 0:
+            raise ValueError("small_part_triangle_threshold must be greater than or equal to 0")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

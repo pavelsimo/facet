@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
@@ -181,3 +183,82 @@ def test_target_triangle_budget_warns_when_unique_mesh_minimum_exceeds_target(mo
         "target_triangles is lower than the number of non-empty unique meshes; using one triangle per mesh"
     ]
     assert optimized.report.steps[-1].warnings == optimized.report.warnings
+
+
+def test_preserve_small_parts_keeps_parts_above_global_budget(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    calls: list[int] = []
+
+    def fake_simplify(self: Mesh, *, target_triangles: int | None = None, ratio: float | None = None) -> Mesh:
+        calls.append(self.triangle_count)
+        return mesh_with_triangles(int(target_triangles or 1))
+
+    monkeypatch.setattr(Mesh, "simplify", fake_simplify)
+    asset = Asset(
+        root=Node(
+            id="root",
+            name="root",
+            children=[
+                Node(id="small_node", name="Small", part_id="small"),
+                Node(id="large_node", name="Large", part_id="large"),
+            ],
+        ),
+        parts={
+            "small": Part(id="small", name="Small", mesh=mesh_with_triangles(2)),
+            "large": Part(id="large", name="Large", mesh=mesh_with_triangles(8)),
+        },
+    )
+
+    optimized = asset.optimize(
+        OptimizeOptions(
+            target_triangles=3,
+            preserve_small_parts=True,
+            small_part_triangle_threshold=2,
+            optimize_buffers=False,
+        )
+    )
+
+    assert optimized.parts["small"].mesh is not None
+    assert optimized.parts["small"].mesh.triangle_count == 2
+    assert optimized.parts["small"].metadata["simplification_preserved"] == "small_part"
+    assert calls == [8]
+    assert optimized.triangle_count == 3
+
+
+def test_preserve_material_boundaries_keeps_adjacent_faces() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]], dtype=float),
+        faces=np.array([[0, 1, 2], [2, 1, 3]], dtype=int),
+        material_indices=np.array([0, 1], dtype=int),
+    )
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="node", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", mesh=mesh)},
+    )
+
+    optimized = asset.optimize(
+        OptimizeOptions(target_triangles=1, preserve_material_boundaries=True, optimize_buffers=False)
+    )
+    optimized_part = optimized.parts["part"]
+    optimized_mesh = optimized_part.mesh
+
+    assert optimized_mesh is not None
+    assert optimized_mesh.triangle_count == 2
+    feature_counts = json.loads(str(optimized_part.metadata["simplification_preserved_features"]))
+    assert feature_counts["material_boundary_faces"] == 2
+
+
+def test_preserve_hard_edges_keeps_non_coplanar_faces() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float),
+        faces=np.array([[0, 1, 2], [0, 3, 1]], dtype=int),
+    )
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="node", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", mesh=mesh)},
+    )
+
+    optimized = asset.optimize(OptimizeOptions(target_triangles=1, preserve_hard_edges=True, optimize_buffers=False))
+    optimized_mesh = optimized.parts["part"].mesh
+
+    assert optimized_mesh is not None
+    assert optimized_mesh.triangle_count == 2

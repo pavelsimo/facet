@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
@@ -509,7 +510,18 @@ class Mesh:
         mesh.validate()
         return mesh
 
-    def simplify(self, *, target_triangles: int | None = None, ratio: float | None = None) -> Mesh:
+    def simplify(
+        self,
+        *,
+        target_triangles: int | None = None,
+        ratio: float | None = None,
+        preserve_hard_edges: bool = False,
+        hard_edge_angle: float = 30.0,
+        preserve_holes: bool = False,
+        preserve_material_boundaries: bool = False,
+        preserve_uv_seams: bool = False,
+        preserve_silhouette: bool = False,
+    ) -> Mesh:
         if self.triangle_count == 0:
             return self.copy()
         if target_triangles is None:
@@ -519,6 +531,32 @@ class Mesh:
         target_triangles = max(1, min(int(target_triangles), self.triangle_count))
         if target_triangles >= self.triangle_count:
             return self.copy()
+
+        if any(
+            (
+                preserve_hard_edges,
+                preserve_holes,
+                preserve_material_boundaries,
+                preserve_uv_seams,
+                preserve_silhouette,
+            )
+        ):
+            protected = self._feature_face_indices(
+                preserve_hard_edges=preserve_hard_edges,
+                hard_edge_angle=hard_edge_angle,
+                preserve_holes=preserve_holes,
+                preserve_material_boundaries=preserve_material_boundaries,
+                preserve_uv_seams=preserve_uv_seams,
+                preserve_silhouette=preserve_silhouette,
+            )
+            if protected.size:
+                mesh = self._simplify_preserving_faces(protected, max(target_triangles, int(protected.shape[0])))
+                mesh.metadata = {
+                    **mesh.metadata,
+                    "simplification_preserved_feature_faces": str(int(protected.shape[0])),
+                }
+                mesh.validate()
+                return mesh
 
         try:
             import meshoptimizer
@@ -629,6 +667,177 @@ class Mesh:
             return mesh
         except Exception:
             return self.copy()
+
+    def feature_preservation_counts(
+        self,
+        *,
+        preserve_hard_edges: bool = False,
+        hard_edge_angle: float = 30.0,
+        preserve_holes: bool = False,
+        preserve_material_boundaries: bool = False,
+        preserve_uv_seams: bool = False,
+        preserve_silhouette: bool = False,
+    ) -> dict[str, int]:
+        groups = self._feature_face_groups(
+            preserve_hard_edges=preserve_hard_edges,
+            hard_edge_angle=hard_edge_angle,
+            preserve_holes=preserve_holes,
+            preserve_material_boundaries=preserve_material_boundaries,
+            preserve_uv_seams=preserve_uv_seams,
+            preserve_silhouette=preserve_silhouette,
+        )
+        union: set[int] = set()
+        for values in groups.values():
+            union.update(values)
+        return {
+            "hard_edge_faces": len(groups["hard_edges"]),
+            "hole_boundary_faces": len(groups["holes"]),
+            "material_boundary_faces": len(groups["material_boundaries"]),
+            "uv_seam_faces": len(groups["uv_seams"]),
+            "silhouette_faces": len(groups["silhouette"]),
+            "total_feature_faces": len(union),
+        }
+
+    def _simplify_preserving_faces(self, protected_faces: IntArray, target_triangles: int) -> Mesh:
+        protected = {int(index) for index in protected_faces.astype(int).tolist()}
+        keep = set(protected)
+        remaining = max(0, min(target_triangles, self.triangle_count) - len(keep))
+        if remaining:
+            unprotected = [index for index in range(self.triangle_count) if index not in protected]
+            if unprotected:
+                stride = max(1, int(np.ceil(len(unprotected) / remaining)))
+                keep.update(unprotected[::stride][:remaining])
+        keep_indices = np.asarray(sorted(keep), dtype=np.int64)
+        if keep_indices.shape[0] >= self.triangle_count:
+            return self.copy()
+        return self._filter_faces(keep_indices).remove_unreferenced_vertices().compute_normals()
+
+    def _feature_face_indices(
+        self,
+        *,
+        preserve_hard_edges: bool,
+        hard_edge_angle: float,
+        preserve_holes: bool,
+        preserve_material_boundaries: bool,
+        preserve_uv_seams: bool,
+        preserve_silhouette: bool,
+    ) -> IntArray:
+        groups = self._feature_face_groups(
+            preserve_hard_edges=preserve_hard_edges,
+            hard_edge_angle=hard_edge_angle,
+            preserve_holes=preserve_holes,
+            preserve_material_boundaries=preserve_material_boundaries,
+            preserve_uv_seams=preserve_uv_seams,
+            preserve_silhouette=preserve_silhouette,
+        )
+        protected: set[int] = set()
+        for values in groups.values():
+            protected.update(values)
+        return np.asarray(sorted(protected), dtype=np.int64)
+
+    def _feature_face_groups(
+        self,
+        *,
+        preserve_hard_edges: bool,
+        hard_edge_angle: float,
+        preserve_holes: bool,
+        preserve_material_boundaries: bool,
+        preserve_uv_seams: bool,
+        preserve_silhouette: bool,
+    ) -> dict[str, set[int]]:
+        groups: dict[str, set[int]] = {
+            "hard_edges": set(),
+            "holes": set(),
+            "material_boundaries": set(),
+            "uv_seams": set(),
+            "silhouette": set(),
+        }
+        if self.triangle_count == 0:
+            return groups
+
+        edge_faces = self._edge_faces_map()
+        if preserve_holes:
+            for faces in edge_faces.values():
+                if len(faces) == 1:
+                    groups["holes"].update(faces)
+        if preserve_material_boundaries and self.material_indices is not None:
+            for faces in edge_faces.values():
+                if len(faces) == 2 and self.material_indices[faces[0]] != self.material_indices[faces[1]]:
+                    groups["material_boundaries"].update(faces)
+        if preserve_hard_edges:
+            face_normals = self._face_unit_normals()
+            limit = math.cos(math.radians(hard_edge_angle))
+            for faces in edge_faces.values():
+                if len(faces) != 2:
+                    continue
+                cosine = float(np.dot(face_normals[faces[0]], face_normals[faces[1]]))
+                if cosine < limit:
+                    groups["hard_edges"].update(faces)
+        if preserve_uv_seams:
+            seam_vertices = self._uv_seam_vertices()
+            if seam_vertices:
+                for face_index, face in enumerate(self.faces.astype(int).tolist()):
+                    if any(vertex in seam_vertices for vertex in face):
+                        groups["uv_seams"].add(face_index)
+        if preserve_silhouette:
+            groups["silhouette"].update(self._silhouette_face_indices())
+        return groups
+
+    def _edge_faces_map(self) -> dict[tuple[int, int], list[int]]:
+        edge_faces: dict[tuple[int, int], list[int]] = {}
+        for face_index, face in enumerate(self.faces.astype(int).tolist()):
+            for start, end in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
+                edge = (min(start, end), max(start, end))
+                edge_faces.setdefault(edge, []).append(face_index)
+        return edge_faces
+
+    def _face_unit_normals(self) -> FloatArray:
+        if self.triangle_count == 0:
+            return np.empty((0, 3), dtype=np.float64)
+        p0 = self.points[self.faces[:, 0]]
+        p1 = self.points[self.faces[:, 1]]
+        p2 = self.points[self.faces[:, 2]]
+        normals = np.cross(p1 - p0, p2 - p0)
+        lengths = np.linalg.norm(normals, axis=1)
+        valid = lengths > 0.0
+        unit = np.zeros_like(normals, dtype=np.float64)
+        unit[valid] = normals[valid] / lengths[valid, None]
+        return unit
+
+    def _uv_seam_vertices(self) -> set[int]:
+        if not self.uvs or self.vertex_count == 0:
+            return set()
+        by_position: dict[tuple[float, float, float], list[int]] = {}
+        rounded = np.round(self.points, 9)
+        for index, point in enumerate(rounded.tolist()):
+            by_position.setdefault((float(point[0]), float(point[1]), float(point[2])), []).append(index)
+
+        seam_vertices: set[int] = set()
+        for indices in by_position.values():
+            if len(indices) < 2:
+                continue
+            for channel_values in self.uvs.values():
+                rounded_uvs = np.round(channel_values[indices], 9)
+                if np.unique(rounded_uvs, axis=0).shape[0] > 1:
+                    seam_vertices.update(indices)
+                    break
+        return seam_vertices
+
+    def _silhouette_face_indices(self) -> set[int]:
+        if self.vertex_count == 0 or self.triangle_count == 0:
+            return set()
+        mins, maxs = self.bounds()
+        span = maxs - mins
+        tolerance = max(float(span.max()) * 1e-6, 1e-9)
+        on_extents = np.any(np.isclose(self.points, mins, atol=tolerance), axis=1) | np.any(
+            np.isclose(self.points, maxs, atol=tolerance),
+            axis=1,
+        )
+        return {
+            face_index
+            for face_index, face in enumerate(self.faces.astype(int).tolist())
+            if any(on_extents[vertex] for vertex in face)
+        }
 
     def _assign_materials_by_nearest_centroid(self, points: FloatArray, faces: IntArray) -> IntArray | None:
         if self.material_indices is None or self.triangle_count == 0 or faces.size == 0:

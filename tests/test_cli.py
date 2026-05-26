@@ -116,6 +116,8 @@ def test_convert_help() -> None:
     assert "--materials" in plain(result.output)
     assert "--uv1" in plain(result.output)
     assert "--no-preserve-instances" in plain(result.output)
+    assert "--preserve-hard-edges" in plain(result.output)
+    assert "material boundaries" in plain(result.output)
 
 
 def test_validate_help() -> None:
@@ -834,6 +836,21 @@ def test_debug_requires_text_usd_output(capsys) -> None:  # type: ignore[no-unty
     result = invoke_run(["--dry-run", "convert", "input.step", "output.usdc", "--debug"], capsys)
     assert result.exit_code == 2
     assert "--debug requires .usd or .usda output" in result.stderr
+
+
+def test_convert_rejects_invalid_hard_edge_angle(capsys) -> None:  # type: ignore[no-untyped-def]
+    result = invoke_run(["--dry-run", "convert", "input.step", "output.usdc", "--hard-edge-angle", "0"], capsys)
+    assert result.exit_code == 2
+    assert "--hard-edge-angle must be greater than 0" in result.stderr
+
+
+def test_convert_rejects_invalid_small_part_threshold(capsys) -> None:  # type: ignore[no-untyped-def]
+    result = invoke_run(
+        ["--dry-run", "convert", "input.step", "output.usdc", "--small-part-triangle-threshold", "-1"],
+        capsys,
+    )
+    assert result.exit_code == 2
+    assert "--small-part-triangle-threshold must be greater than or equal to 0" in result.stderr
 
 
 def test_convert_rejects_invalid_lods_as_json(capsys) -> None:  # type: ignore[no-untyped-def]

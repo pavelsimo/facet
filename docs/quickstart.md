@@ -65,6 +65,9 @@ fascat convert input.step output.usdc \
   --curvature-adaptive \
   --quality-report tessellation-quality.json \
   --target-triangles 500000 \
+  --preserve-hard-edges \
+  --preserve-material-boundaries \
+  --preserve-small-parts \
   --materials display \
   --uv1 box \
   --lods 0.5,0.25,0.1

@@ -126,7 +126,21 @@ def test_asset_operation_reports_include_options_and_before_after_counts() -> No
             "area_epsilon",
         },
         "stage": {"materials", "normals", "uv0", "uv1"},
-        "optimize": {"target_triangles", "ratio", "preserve_instances", "simplify", "optimize_buffers"},
+        "optimize": {
+            "target_triangles",
+            "ratio",
+            "preserve_instances",
+            "simplify",
+            "optimize_buffers",
+            "preserve_hard_edges",
+            "hard_edge_angle",
+            "preserve_holes",
+            "preserve_material_boundaries",
+            "preserve_uv_seams",
+            "preserve_small_parts",
+            "small_part_triangle_threshold",
+            "preserve_silhouette",
+        },
         "lods": {"ratios", "mode"},
     }
     operations = [
