@@ -115,8 +115,9 @@ class Asset:
     report: Report = field(default_factory=Report)
 
     def __post_init__(self) -> None:
-        self.parts = dict(self.parts)
-        self.materials = dict(self.materials)
+        self.root = self.root.copy()
+        self.parts = {part_id: part.copy(keep_source=True) for part_id, part in self.parts.items()}
+        self.materials = {material_id: material.copy() for material_id, material in self.materials.items()}
         self.report = self.report.copy()
 
     @property

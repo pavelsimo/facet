@@ -85,21 +85,32 @@ def test_node_rejects_invalid_transform_shape() -> None:
 def test_part_and_asset_copy_mutable_containers_on_construction() -> None:
     material_ids = ["red"]
     metadata = {"source": "cad"}
+    root_metadata = {"source": "root"}
+    child = Node(id="node", name="Node", part_id="part")
     lod_mesh = Mesh(
         points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=float),
         faces=np.array([[0, 1, 2]], dtype=int),
     )
     lod_meshes = [lod_mesh]
+    mesh = lod_mesh.copy()
     part = Part(id="part", name="Part", material_ids=material_ids, metadata=metadata, lod_meshes=lod_meshes)
     parts = {"part": part}
-    materials = {"red": Material(id="red", name="Red", base_color=(1.0, 0.0, 0.0, 1.0))}
+    material = Material(id="red", name="Red", base_color=(1.0, 0.0, 0.0, 1.0), metadata={"source": "cad"})
+    materials = {"red": material}
+    root = Node(id="root", name="root", children=[child], metadata=root_metadata)
 
-    asset = Asset(root=Node(id="root", name="root"), parts=parts, materials=materials)
+    asset = Asset(root=root, parts=parts, materials=materials)
     material_ids.append("blue")
     metadata["source"] = "changed"
     lod_meshes.append(lod_mesh.copy())
     parts["other"] = Part(id="other", name="Other")
+    part.name = "Changed"
+    part.mesh = mesh
+    material.metadata["source"] = "changed"
     materials["blue"] = Material(id="blue", name="Blue", base_color=(0.0, 0.0, 1.0, 1.0))
+    root.children.append(Node(id="other", name="Other"))
+    root_metadata["source"] = "changed"
+    child.name = "Changed"
 
     assert part.material_ids == ["red"]
     assert part.metadata == {"source": "cad"}
@@ -107,6 +118,11 @@ def test_part_and_asset_copy_mutable_containers_on_construction() -> None:
     assert part.lod_meshes[0] is lod_mesh
     assert set(asset.parts) == {"part"}
     assert set(asset.materials) == {"red"}
+    assert asset.parts["part"].name == "Part"
+    assert asset.parts["part"].mesh is None
+    assert asset.materials["red"].metadata == {"source": "cad"}
+    assert asset.root.metadata == {"source": "root"}
+    assert [node.name for node in asset.root.children] == ["Node"]
 
 
 def test_report_models_copy_mutable_inputs_on_construction() -> None:
