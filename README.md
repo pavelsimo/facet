@@ -91,17 +91,54 @@ Fascat follows standard CLI stream conventions: primary output and JSON go to st
 ```python
 import fascat as fc
 
-fc.convert(
-    "pump.step",
-    "pump.usdc",
-    tessellation=fc.Tessellation(sag=0.1, angle=15, max_edge_length=25),
-    stage=fc.StageOptions(materials="cad", uv0="box", uv1="unwrap"),
-    optimize=fc.OptimizeOptions(target_triangles=1_000_000, preserve_instances=True),
-    lods=fc.LODOptions((0.5, 0.25, 0.1)),
+asset = fc.read_step("motor.step")
+
+asset = asset.tessellate(
+    fc.Tessellation(
+        sag=0.1,
+        angle=15.0,
+        relative=True,
+        max_edge_length=None,
+    )
 )
 
-asset = fc.read_step("pump.step").tessellate().repair().stage().optimize()
-asset.write_gltf("pump.glb")
+asset = asset.repair(
+    fc.RepairOptions(
+        tolerance=0.05,
+        merge_vertices=True,
+        delete_degenerate=True,
+        fix_winding=True,
+        fill_small_holes=False,
+    )
+)
+
+asset = asset.stage(
+    fc.StageOptions(
+        materials="cad",
+        normals=True,
+        uv0="box",
+        uv1=None,
+    )
+)
+
+asset = asset.optimize(
+    fc.OptimizeOptions(
+        target_triangles=500_000,
+        preserve_instances=True,
+        simplify=True,
+        optimize_buffers=True,
+    )
+)
+
+asset = asset.lods(
+    fc.LODOptions(
+        ratios=[0.5, 0.25, 0.1],
+        mode="variants",
+    )
+)
+
+asset.write_usd("motor.usdc")
+asset.write_gltf("motor.glb")
 ```
 
 ## Docs
