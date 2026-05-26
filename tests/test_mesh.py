@@ -127,6 +127,33 @@ def test_optimize_buffers_preserves_uvs_and_material_indices() -> None:
     assert sorted(optimized.material_indices.tolist()) == [0, 1]
 
 
+def test_simplify_preserves_material_indices() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]], dtype=float),
+        faces=np.array([[0, 1, 2], [2, 1, 3]], dtype=int),
+        material_indices=np.array([0, 1], dtype=int),
+    )
+
+    simplified = mesh.simplify(target_triangles=1)
+
+    assert simplified.material_indices is not None
+    assert simplified.material_indices.shape == (simplified.triangle_count,)
+    assert set(simplified.material_indices.tolist()).issubset({0, 1})
+
+
+def test_merge_close_vertices_preserves_material_indices() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [0.001, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]], dtype=float),
+        faces=np.array([[0, 2, 3], [1, 2, 4]], dtype=int),
+        material_indices=np.array([0, 1], dtype=int),
+    )
+
+    merged = mesh.merge_close_vertices(0.01)
+
+    assert merged.material_indices is not None
+    assert sorted(merged.material_indices.tolist()) == [0, 1]
+
+
 def test_fill_holes_is_limited_to_small_non_planar_boundaries() -> None:
     open_sheet = Mesh(
         points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]], dtype=float),

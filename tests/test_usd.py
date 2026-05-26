@@ -148,3 +148,27 @@ def test_usd_export_does_not_instance_when_instances_are_not_preserved(tmp_path:
     assert stage is not None
     assert not stage.GetPrimAtPath("/Scene/Cube_A").IsInstanceable()
     assert not stage.GetPrimAtPath("/Scene/Cube_B").IsInstanceable()
+
+
+def test_usd_export_authors_debug_metadata_and_display_color_only_materials(tmp_path: Path) -> None:
+    mesh = cube_mesh()
+    root = Node(id="root", name="root", children=[Node(id="n1", name="Cube", part_id="cube")])
+    part = Part(
+        id="cube",
+        name="Cube",
+        mesh=mesh,
+        metadata={"display_color": "0.100000,0.200000,0.300000,0.400000"},
+    )
+    asset = Asset(root=root, parts={"cube": part}, materials={})
+    output = tmp_path / "debug.usda"
+
+    write_usd(asset, output, debug=True)
+
+    stage = Usd.Stage.Open(str(output))
+    assert stage is not None
+    assert stage.GetDefaultPrim().GetCustomDataByKey("fascat:debug") is True
+    mesh_prim = next(prim for prim in Usd.PrimRange(stage.GetDefaultPrim()) if prim.IsA(UsdGeom.Mesh))
+    usd_mesh = UsdGeom.Mesh(mesh_prim)
+
+    assert usd_mesh.GetDisplayColorAttr().Get()[0] == (0.1, 0.2, 0.3)
+    assert usd_mesh.GetDisplayOpacityAttr().Get()[0] == pytest.approx(0.4)

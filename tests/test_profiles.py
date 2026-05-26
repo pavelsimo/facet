@@ -26,6 +26,7 @@ def test_profiles_produce_deterministic_option_sets() -> None:
         (lambda: fc.Tessellation(sag=0), "sag"),
         (lambda: fc.Tessellation(angle=181), "angle"),
         (lambda: fc.RepairOptions(tolerance=-1), "tolerance"),
+        (lambda: fc.StageOptions(materials="bad"), "materials"),
         (lambda: fc.OptimizeOptions(ratio=1), "ratio"),
         (lambda: fc.LODOptions((0.25, 0.5)), "sorted"),
     ],

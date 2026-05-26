@@ -11,6 +11,7 @@ def stage_asset(asset: Asset, options: StageOptions) -> Asset:
         _require_xatlas()
     if options.uv0 == "unwrap":
         _require_xatlas()
+    _stage_materials(result, options)
 
     for part in result.parts.values():
         if part.mesh is None:
@@ -29,6 +30,21 @@ def stage_asset(asset: Asset, options: StageOptions) -> Asset:
         part.mesh = mesh
         part.fingerprint = mesh.fingerprint()
     return result
+
+
+def _stage_materials(asset: Asset, options: StageOptions) -> None:
+    if options.materials == "cad":
+        return
+    for part in asset.parts.values():
+        part.metadata.pop("display_color", None)
+        if options.materials == "display" and part.material_ids:
+            material = asset.materials.get(part.material_ids[0])
+            if material is not None:
+                part.metadata["display_color"] = ",".join(f"{value:.6f}" for value in material.base_color)
+        part.material_ids = []
+        if part.mesh is not None:
+            part.mesh.material_indices = None
+    asset.materials = {}
 
 
 def _require_xatlas() -> None:

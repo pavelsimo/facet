@@ -146,7 +146,12 @@ class Mesh:
         old_to_new_cluster[order] = np.arange(order.shape[0], dtype=np.int64)
         new_points = self.points[np.sort(first_indices)]
         new_faces = old_to_new_cluster[inverse][self.faces]
-        return self._with_geometry(new_points, new_faces).remove_degenerate_faces()
+        mesh = self.copy()
+        mesh.points = new_points
+        mesh.faces = new_faces
+        mesh.normals = None
+        mesh.uvs = {}
+        return mesh.remove_degenerate_faces()
 
     def remove_duplicate_faces(self) -> Mesh:
         if self.triangle_count == 0:
@@ -311,7 +316,7 @@ class Mesh:
             face_count = simplified_indices.size // 3
             mesh = self.copy()
             mesh.faces = simplified_indices[: face_count * 3].reshape((-1, 3))
-            mesh.material_indices = None
+            mesh.material_indices = self._assign_materials_by_nearest_centroid(mesh.points, mesh.faces)
             return mesh.remove_unreferenced_vertices().compute_normals()
         except Exception:
             try:
@@ -320,7 +325,13 @@ class Mesh:
                 points, faces = simplify(
                     self.points.astype(np.float64), self.faces.astype(np.int64), target_count=target_triangles
                 )
-                mesh = Mesh(points=np.asarray(points), faces=np.asarray(faces))
+                points_array = np.asarray(points, dtype=np.float64)
+                faces_array = np.asarray(faces, dtype=np.int64)
+                mesh = Mesh(
+                    points=points_array,
+                    faces=faces_array,
+                    material_indices=self._assign_materials_by_nearest_centroid(points_array, faces_array),
+                )
                 if self.uvs:
                     for channel in self.uvs:
                         mesh = mesh.box_uv(channel)
@@ -390,6 +401,19 @@ class Mesh:
             return mesh
         except Exception:
             return self.copy()
+
+    def _assign_materials_by_nearest_centroid(self, points: FloatArray, faces: IntArray) -> IntArray | None:
+        if self.material_indices is None or self.triangle_count == 0 or faces.size == 0:
+            return None
+        source_centroids = self.points[self.faces].mean(axis=1)
+        target_centroids = points[faces].mean(axis=1)
+        nearest = np.empty(target_centroids.shape[0], dtype=np.int64)
+        chunk_size = 4096
+        for start in range(0, target_centroids.shape[0], chunk_size):
+            end = min(start + chunk_size, target_centroids.shape[0])
+            delta = target_centroids[start:end, None, :] - source_centroids[None, :, :]
+            nearest[start:end] = np.argmin(np.einsum("ijk,ijk->ij", delta, delta), axis=1)
+        return cast(IntArray, np.asarray(self.material_indices[nearest], dtype=np.int64).copy())
 
     def fill_holes(self) -> Mesh:
         loops = self._boundary_loops()

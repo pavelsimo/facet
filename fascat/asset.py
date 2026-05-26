@@ -205,10 +205,10 @@ class Asset:
         )
         return asset
 
-    def write_usd(self, path: str | Path) -> None:
+    def write_usd(self, path: str | Path, *, debug: bool = False) -> None:
         from fascat.io.usd import write_usd
 
-        write_usd(self, path)
+        write_usd(self, path, debug=debug)
 
     def to_dict(self) -> dict[str, Any]:
         return {

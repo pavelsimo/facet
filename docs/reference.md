@@ -67,6 +67,8 @@ When output is `-`, USD bytes are reserved for stdout and progress/errors stay o
 
 `--debug` is only valid with `.usd` or `.usda` output. Binary `.usdc` output is rejected when debug mode is enabled.
 
+`convert` validates the generated USD before reporting success. If validation fails, the command exits non-zero.
+
 ## Output streams
 
 | Stream | Contents |

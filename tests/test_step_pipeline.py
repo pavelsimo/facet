@@ -80,5 +80,6 @@ def test_convert_progress_callback_receives_stage_stats(tmp_path: Path) -> None:
         "optimize",
         "lods",
         "write",
+        "validate",
     ]
     assert all("triangles" in stats for _step, stats in progress)

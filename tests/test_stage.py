@@ -4,8 +4,39 @@ import numpy as np
 import pytest
 
 from fascat.asset import Asset, Node, Part
+from fascat.material import Material
 from fascat.mesh import Mesh
 from fascat.options import StageOptions
+
+
+def test_stage_material_modes_control_bindings_and_display_color() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=float),
+        faces=np.array([[0, 1, 2]], dtype=int),
+        material_indices=np.array([0], dtype=int),
+    )
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="node", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", mesh=mesh, material_ids=["red"])},
+        materials={"red": Material(id="red", name="Red", base_color=(1.0, 0.0, 0.0, 1.0))},
+    )
+
+    display = asset.stage(StageOptions(materials="display", uv0="none", uv1=None))
+    display_part = display.parts["part"]
+    display_mesh = display_part.mesh
+
+    assert display.materials == {}
+    assert display_part.material_ids == []
+    assert display_part.metadata["display_color"] == "1.000000,0.000000,0.000000,1.000000"
+    assert display_mesh is not None
+    assert display_mesh.material_indices is None
+
+    none = asset.stage(StageOptions(materials="none", uv0="none", uv1=None))
+    none_part = none.parts["part"]
+
+    assert none.materials == {}
+    assert none_part.material_ids == []
+    assert "display_color" not in none_part.metadata
 
 
 @pytest.mark.requires_xatlas

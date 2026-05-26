@@ -55,6 +55,8 @@ class StageOptions:
     uv1: UVMode | None = None
 
     def __post_init__(self) -> None:
+        if self.materials not in {"cad", "display", "none"}:
+            raise ValueError("materials must be one of: cad, display, none")
         if self.uv0 not in {"none", "box", "unwrap"}:
             raise ValueError("uv0 must be one of: none, box, unwrap")
         if self.uv1 not in {None, "none", "box", "unwrap"}:

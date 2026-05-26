@@ -6,7 +6,7 @@ from pathlib import Path
 from fascat import profiles
 from fascat.asset import Asset
 from fascat.io.step import read_step
-from fascat.io.usd import write_usd
+from fascat.io.usd import validate_usd, write_usd
 from fascat.options import ConversionProfile, LODOptions, OptimizeOptions, StageOptions, Tessellation
 
 
@@ -20,6 +20,8 @@ def convert(
     optimize: OptimizeOptions | None = None,
     lods: LODOptions | None = None,
     progress: Callable[[str, dict[str, int]], None] | None = None,
+    validate_output: bool = True,
+    debug: bool = False,
 ) -> Asset:
     selected = profiles.by_name(profile) if isinstance(profile, str) else profile
     asset = read_step(input_path)
@@ -47,9 +49,13 @@ def convert(
         if progress is not None:
             progress("lods", asset.stats())
     asset.report.finish(asset.stats())
-    write_usd(asset, output_path)
+    write_usd(asset, output_path, debug=debug)
     if progress is not None:
         progress("write", asset.stats())
+    if validate_output:
+        validate_usd(output_path)
+        if progress is not None:
+            progress("validate", asset.stats())
     return asset
 
 

@@ -301,6 +301,7 @@ def cmd_convert(
             optimize=optimize_options,
             lods=lod_options,
             progress=_progress_callback(ctx, output_path),
+            debug=debug,
         )
     except typer.Exit:
         raise
@@ -487,14 +488,17 @@ def _convert_for_cli(
     optimize: OptimizeOptions | None,
     lods: LODOptions | None,
     progress: Callable[[str, dict[str, int]], None] | None,
+    debug: bool,
 ) -> Any:
     if _is_stdio(input_path):
         data = sys.stdin.buffer.read()
         if not data:
             raise RuntimeError("Missing input data on stdin.")
         with _temporary_step_file(data) as temp_input:
-            return _convert_output(temp_input, output_path, profile, tessellation, stage, optimize, lods, progress)
-    return _convert_output(input_path, output_path, profile, tessellation, stage, optimize, lods, progress)
+            return _convert_output(
+                temp_input, output_path, profile, tessellation, stage, optimize, lods, progress, debug
+            )
+    return _convert_output(input_path, output_path, profile, tessellation, stage, optimize, lods, progress, debug)
 
 
 def _convert_output(
@@ -506,6 +510,7 @@ def _convert_output(
     optimize: OptimizeOptions | None,
     lods: LODOptions | None,
     progress: Callable[[str, dict[str, int]], None] | None,
+    debug: bool,
 ) -> Any:
     if _is_stdio(output_path):
         import tempfile
@@ -520,6 +525,7 @@ def _convert_output(
                 optimize=optimize,
                 lods=lods,
                 progress=progress,
+                debug=debug,
             )
             handle.seek(0)
             sys.stdout.buffer.write(handle.read())
@@ -533,6 +539,7 @@ def _convert_output(
         optimize=optimize,
         lods=lods,
         progress=progress,
+        debug=debug,
     )
 
 

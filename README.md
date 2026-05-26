@@ -78,7 +78,7 @@ fascat validate motor.usdc
 | `fascat help [command]` | Show top-level or command-specific help |
 | `fascat version` | Print version and exit |
 
-Fascat follows standard CLI stream conventions: primary output and JSON go to stdout, while errors and per-stage conversion progress go to stderr. File arguments accept `-` for stdin/stdout where meaningful.
+Fascat follows standard CLI stream conventions: primary output and JSON go to stdout, while errors and per-stage conversion progress go to stderr. Conversion validates the generated USD before reporting success. File arguments accept `-` for stdin/stdout where meaningful.
 
 ## Python API
 

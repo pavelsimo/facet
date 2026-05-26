@@ -342,3 +342,4 @@ def test_convert_reports_stage_progress_to_stderr(tmp_path: Path, capsys) -> Non
     assert "source:" in result.stderr
     assert "tessellate:" in result.stderr
     assert "write:" in result.stderr
+    assert "validate:" in result.stderr
