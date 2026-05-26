@@ -125,7 +125,17 @@ def test_asset_operation_reports_include_options_and_before_after_counts() -> No
             "fill_small_holes",
             "area_epsilon",
         },
-        "stage": {"materials", "normals", "uv0", "uv1"},
+        "stage": {
+            "materials",
+            "normals",
+            "normal_mode",
+            "hard_edge_angle",
+            "preserve_face_boundaries",
+            "tangents",
+            "validate_normals",
+            "uv0",
+            "uv1",
+        },
         "optimize": {
             "target_triangles",
             "ratio",

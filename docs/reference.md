@@ -56,6 +56,10 @@ fascat inspect input.step --json
 | `--max-sliver-area` | `1e-4` | Area threshold for sliver-face reporting |
 | `--fail-on-open-shells` | `false` | Fail if healed BREP still contains open shells |
 | `--lods` | profile value | Comma-separated LOD ratios, for example `0.5,0.25,0.1` |
+| `--normals` | `smooth` | Normal generation mode: `none`, `smooth`, `hard-edges`, or `flat` |
+| `--preserve-face-boundaries` | `false` | Treat CAD face-group boundaries as hard normal edges |
+| `--tangents` | `false` | Generate glTF-compatible vertex tangents from UV0 |
+| `--validate-normals` | `false` | Validate staged normals and tangents |
 | `--uv0` | `box` | UV0 generation mode: `none`, `box`, or `unwrap` |
 | `--uv1` | `none` | UV1 generation mode: `none`, `box`, or `unwrap` |
 | `--materials` | `cad` | Material staging mode: `cad`, `display`, or `none` |

@@ -68,6 +68,9 @@ fascat convert input.step output.usdc \
   --preserve-hard-edges \
   --preserve-material-boundaries \
   --preserve-small-parts \
+  --normals hard-edges \
+  --tangents \
+  --validate-normals \
   --materials display \
   --uv1 box \
   --lods 0.5,0.25,0.1

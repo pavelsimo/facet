@@ -19,8 +19,17 @@ def stage_asset(asset: Asset, options: StageOptions, *, selected_part_ids: set[s
         if part.mesh is None:
             continue
         mesh = part.mesh
-        if options.normals:
+        if options.normals and options.normal_mode == "hard_edges":
+            mesh = mesh.compute_hard_edge_normals(
+                hard_edge_angle=options.hard_edge_angle,
+                preserve_face_boundaries=options.preserve_face_boundaries,
+            )
+        elif options.normals and options.normal_mode == "flat":
+            mesh = mesh.compute_flat_normals()
+        elif options.normals:
             mesh = mesh.compute_normals()
+        else:
+            mesh.tangents = None
         if options.uv0 == "box":
             mesh = mesh.box_uv(0)
         elif options.uv0 == "unwrap":
@@ -29,6 +38,10 @@ def stage_asset(asset: Asset, options: StageOptions, *, selected_part_ids: set[s
             mesh = mesh.box_uv(1)
         elif options.uv1 == "unwrap":
             mesh = _unwrap_uv(mesh, 1)
+        if options.tangents:
+            mesh = mesh.compute_tangents()
+        if options.validate_normals:
+            mesh.validate_normals(require_tangents=options.tangents)
         part.mesh = mesh
         part.fingerprint = mesh.fingerprint()
     return result

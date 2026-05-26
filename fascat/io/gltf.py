@@ -76,7 +76,7 @@ class _BufferBuilder:
         values: NDArray[Any],
         *,
         component_type: int,
-        accessor_type: Literal["SCALAR", "VEC2", "VEC3"],
+        accessor_type: Literal["SCALAR", "VEC2", "VEC3", "VEC4"],
         target: int,
         minimum: list[float] | None = None,
         maximum: list[float] | None = None,
@@ -243,6 +243,15 @@ def _append_mesh(
             normals,
             component_type=_FLOAT,
             accessor_type="VEC3",
+            target=_ARRAY_BUFFER,
+        )
+    if mesh.tangents is not None:
+        tangents = mesh.tangents.copy()
+        tangents[:, :3] = _normals_to_export_space(mesh.tangents[:, :3], export_space.normal_linear)
+        attributes["TANGENT"] = builder.add_accessor(
+            tangents.astype(np.float32),
+            component_type=_FLOAT,
+            accessor_type="VEC4",
             target=_ARRAY_BUFFER,
         )
     if 0 in mesh.uvs:

@@ -70,6 +70,8 @@ def test_lod_options_normalize_list_ratios() -> None:
         (lambda: fc.RepairOptions(tolerance=-1), "tolerance"),
         (lambda: fc.RepairOptions(area_epsilon=-1), "area_epsilon"),
         (lambda: fc.StageOptions(materials="bad"), "materials"),
+        (lambda: fc.StageOptions(normal_mode="bad"), "normal_mode"),
+        (lambda: fc.StageOptions(hard_edge_angle=0), "hard_edge_angle"),
         (lambda: fc.StageOptions(uv0="bad"), "uv0"),
         (lambda: fc.StageOptions(uv1="bad"), "uv1"),
         (lambda: fc.OptimizeOptions(target_triangles=0), "target_triangles"),

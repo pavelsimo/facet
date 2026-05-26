@@ -80,6 +80,7 @@ def tessellate_shape(
     points: list[tuple[float, float, float]] = []
     faces: list[tuple[int, int, int]] = []
     material_indices: list[int] = []
+    face_groups: dict[str, list[int]] = {}
     face_index = 0
     explorer = TopExp_Explorer(brep_shape, TopAbs_FACE)
     while explorer.More():
@@ -98,10 +99,12 @@ def tessellate_shape(
             reversed_face = face.Orientation() == TopAbs_REVERSED
             for triangle_index in range(1, triangulation.NbTriangles() + 1):
                 a, b, c = triangulation.Triangle(triangle_index).Get()
+                mesh_face_index = len(faces)
                 if reversed_face:
                     faces.append((offset + c - 1, offset + b - 1, offset + a - 1))
                 else:
                     faces.append((offset + a - 1, offset + b - 1, offset + c - 1))
+                face_groups.setdefault(f"occt_face_{face_index}", []).append(mesh_face_index)
                 if material_index is not None:
                     material_indices.append(material_index)
         face_index += 1
@@ -115,6 +118,7 @@ def tessellate_shape(
             if material_indices and len(material_indices) == len(faces)
             else None
         ),
+        face_groups={name: np.asarray(values, dtype=np.int64) for name, values in face_groups.items()},
         metadata={"occt_faces": str(face_index)},
     )
     mesh = _apply_mesh_tessellation_controls(mesh, options)

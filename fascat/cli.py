@@ -94,6 +94,13 @@ class MaterialMode(str, Enum):
     NONE = "none"
 
 
+class NormalMode(str, Enum):
+    NONE = "none"
+    SMOOTH = "smooth"
+    HARD_EDGES = "hard-edges"
+    FLAT = "flat"
+
+
 class MergeMode(str, Enum):
     ALL = "all"
     BY_MATERIAL = "by-material"
@@ -372,6 +379,22 @@ def cmd_convert(
         str | None,
         typer.Option("--lods", help="Comma-separated LOD ratios, for example 0.5,0.25,0.1."),
     ] = None,
+    normals: Annotated[
+        NormalMode,
+        typer.Option("--normals", help="Normal generation mode: none, smooth, hard-edges, or flat."),
+    ] = NormalMode.SMOOTH,
+    preserve_face_boundaries: Annotated[
+        bool,
+        typer.Option("--preserve-face-boundaries", help="Treat CAD face-group boundaries as hard normal edges."),
+    ] = False,
+    tangents: Annotated[
+        bool,
+        typer.Option("--tangents", help="Generate glTF-compatible vertex tangents from UV0."),
+    ] = False,
+    validate_normals: Annotated[
+        bool,
+        typer.Option("--validate-normals", help="Validate staged normals and tangents."),
+    ] = False,
     uv0: Annotated[UVMode, typer.Option("--uv0", help="UV0 generation mode.")] = UVMode.BOX,
     uv1: Annotated[UVMode, typer.Option("--uv1", help="UV1 generation mode.")] = UVMode.NONE,
     materials: Annotated[
@@ -488,6 +511,10 @@ def cmd_convert(
         "max_sliver_area": max_sliver_area,
         "fail_on_open_shells": fail_on_open_shells,
         "lods": None,
+        "normals": normals.value,
+        "preserve_face_boundaries": preserve_face_boundaries,
+        "tangents": tangents,
+        "validate_normals": validate_normals,
         "uv0": uv0.value,
         "uv1": uv1.value,
         "materials": materials.value,
@@ -601,7 +628,18 @@ def cmd_convert(
                 small_part_triangle_threshold=small_part_triangle_threshold,
                 preserve_silhouette=preserve_silhouette,
             )
-        stage_options = replace(profile_options.stage, materials=materials.value, uv0=uv0.value, uv1=uv1.value)
+        stage_options = replace(
+            profile_options.stage,
+            materials=materials.value,
+            normals=normals != NormalMode.NONE,
+            normal_mode=cast(Any, normals.value.replace("-", "_")),
+            hard_edge_angle=hard_edge_angle,
+            preserve_face_boundaries=preserve_face_boundaries,
+            tangents=tangents,
+            validate_normals=validate_normals,
+            uv0=uv0.value,
+            uv1=uv1.value,
+        )
         import_options = _step_read_options(metadata, pmi)
         heal_options = (
             _brep_heal_options(

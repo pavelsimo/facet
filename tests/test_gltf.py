@@ -38,7 +38,7 @@ def _asset_with_materials_and_lods() -> Asset:
         ),
         uvs={0: np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], dtype=float)},
         material_indices=np.array([0, 1], dtype=int),
-    )
+    ).compute_tangents()
     lod_mesh = Mesh(
         points=np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=float),
         faces=np.array([[0, 1, 2]], dtype=int),
@@ -100,6 +100,7 @@ def test_glb_export_writes_valid_scene_materials_uvs_and_lod_metadata(tmp_path: 
     assert len(document["meshes"]) == 2
     assert len(document["meshes"][0]["primitives"]) == 2
     assert document["meshes"][0]["primitives"][0]["attributes"]["TEXCOORD_0"] >= 0
+    assert document["meshes"][0]["primitives"][0]["attributes"]["TANGENT"] >= 0
     assert document["materials"][0]["pbrMetallicRoughness"]["baseColorFactor"] == [1.0, 0.0, 0.0, 1.0]
     assert document["materials"][1]["alphaMode"] == "BLEND"
     assert "_fascat_index" not in document["materials"][0]

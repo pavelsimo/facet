@@ -37,6 +37,7 @@ class Mesh:
     points: FloatArray
     faces: IntArray
     normals: FloatArray | None = None
+    tangents: FloatArray | None = None
     uvs: dict[int, FloatArray] = field(default_factory=dict)
     material_indices: IntArray | None = None
     face_groups: dict[str, IntArray] = field(default_factory=dict)
@@ -47,6 +48,8 @@ class Mesh:
         self.faces = np.array(self.faces, dtype=np.int64, copy=True)
         if self.normals is not None:
             self.normals = np.array(self.normals, dtype=np.float64, copy=True)
+        if self.tangents is not None:
+            self.tangents = np.array(self.tangents, dtype=np.float64, copy=True)
         self.uvs = {channel: np.array(values, dtype=np.float64, copy=True) for channel, values in self.uvs.items()}
         if self.material_indices is not None:
             self.material_indices = np.array(self.material_indices, dtype=np.int64, copy=True)
@@ -68,6 +71,7 @@ class Mesh:
             points=self.points.copy(),
             faces=self.faces.copy(),
             normals=None if self.normals is None else self.normals.copy(),
+            tangents=None if self.tangents is None else self.tangents.copy(),
             uvs={channel: values.copy() for channel, values in self.uvs.items()},
             material_indices=None if self.material_indices is None else self.material_indices.copy(),
             face_groups={name: values.copy() for name, values in self.face_groups.items()},
@@ -90,6 +94,11 @@ class Mesh:
                 raise MeshValidationError("normals must match points shape")
             if not np.isfinite(self.normals).all():
                 raise MeshValidationError("normals must not contain NaN or Inf values")
+        if self.tangents is not None:
+            if self.tangents.shape != (self.vertex_count, 4):
+                raise MeshValidationError("tangents must have shape (N, 4)")
+            if not np.isfinite(self.tangents).all():
+                raise MeshValidationError("tangents must not contain NaN or Inf values")
         for channel, values in self.uvs.items():
             if values.ndim != 2 or values.shape[1] != 2:
                 raise MeshValidationError(f"uv channel {channel} must have shape (N, 2)")
@@ -163,6 +172,8 @@ class Mesh:
         mesh.faces = remap[self.faces]
         if self.normals is not None:
             mesh.normals = self.normals[used].copy()
+        if self.tangents is not None:
+            mesh.tangents = self.tangents[used].copy()
         mesh.uvs = {channel: values[used].copy() for channel, values in self.uvs.items()}
         return mesh
 
@@ -180,6 +191,7 @@ class Mesh:
         mesh.points = new_points
         mesh.faces = new_faces
         mesh.normals = None
+        mesh.tangents = None
         mesh.uvs = {}
         return mesh.remove_degenerate_faces()
 
@@ -288,7 +300,178 @@ class Mesh:
         normals[~nonzero] = np.array([0.0, 0.0, 1.0], dtype=np.float64)
         mesh = self.copy()
         mesh.normals = normals
+        mesh.tangents = None
         return mesh
+
+    def compute_flat_normals(self) -> Mesh:
+        if self.triangle_count == 0:
+            return self.compute_normals()
+        points: list[list[float]] = []
+        normals: list[list[float]] = []
+        faces: list[list[int]] = []
+        uvs: dict[int, list[list[float]]] = {channel: [] for channel in self.uvs}
+        face_normals = self._face_unit_normals()
+        for face_index, face in enumerate(self.faces.astype(int).tolist()):
+            new_face: list[int] = []
+            for vertex in face:
+                new_face.append(len(points))
+                points.append(self.points[vertex].astype(float).tolist())
+                normals.append(face_normals[face_index].astype(float).tolist())
+                for channel, values in self.uvs.items():
+                    uvs[channel].append(values[vertex].astype(float).tolist())
+            faces.append(new_face)
+        mesh = Mesh(
+            points=np.asarray(points, dtype=np.float64),
+            faces=np.asarray(faces, dtype=np.int64),
+            normals=np.asarray(normals, dtype=np.float64),
+            uvs={channel: np.asarray(values, dtype=np.float64) for channel, values in uvs.items()},
+            material_indices=None if self.material_indices is None else self.material_indices.copy(),
+            face_groups={name: values.copy() for name, values in self.face_groups.items()},
+            metadata={**self.metadata, "normal_mode": "flat"},
+        )
+        mesh.validate()
+        return mesh
+
+    def compute_hard_edge_normals(
+        self,
+        *,
+        hard_edge_angle: float = 30.0,
+        preserve_face_boundaries: bool = False,
+    ) -> Mesh:
+        if self.triangle_count == 0:
+            return self.compute_normals()
+        hard_edges = self._hard_normal_edges(
+            hard_edge_angle=hard_edge_angle,
+            preserve_face_boundaries=preserve_face_boundaries,
+        )
+        if not hard_edges:
+            mesh = self.compute_normals()
+            mesh.metadata = {**mesh.metadata, "normal_mode": "hard_edges"}
+            return mesh
+
+        edge_faces = self._edge_faces_map()
+        face_normals = self._face_unit_normals()
+        incident_faces: dict[int, set[int]] = {index: set() for index in range(self.vertex_count)}
+        for face_index, face in enumerate(self.faces.astype(int).tolist()):
+            for vertex in face:
+                incident_faces[vertex].add(face_index)
+
+        component_by_vertex_face: dict[tuple[int, int], int] = {}
+        component_normals: list[FloatArray] = []
+        for vertex, faces in incident_faces.items():
+            remaining = set(faces)
+            while remaining:
+                seed = remaining.pop()
+                component = {seed}
+                stack = [seed]
+                while stack:
+                    current = stack.pop()
+                    current_face = self.faces[current].astype(int).tolist()
+                    for edge in (
+                        (current_face[0], current_face[1]),
+                        (current_face[1], current_face[2]),
+                        (current_face[2], current_face[0]),
+                    ):
+                        if vertex not in edge:
+                            continue
+                        key = (min(edge), max(edge))
+                        if key in hard_edges:
+                            continue
+                        for neighbor in edge_faces.get(key, []):
+                            if neighbor in remaining:
+                                remaining.remove(neighbor)
+                                component.add(neighbor)
+                                stack.append(neighbor)
+                normal = face_normals[list(component)].sum(axis=0)
+                length = float(np.linalg.norm(normal))
+                if length > 0.0:
+                    normal = normal / length
+                component_index = len(component_normals)
+                component_normals.append(normal)
+                for face_index in component:
+                    component_by_vertex_face[(vertex, face_index)] = component_index
+
+        points: list[list[float]] = []
+        normals: list[list[float]] = []
+        uvs: dict[int, list[list[float]]] = {channel: [] for channel in self.uvs}
+        vertex_map: dict[tuple[int, int], int] = {}
+        new_faces: list[list[int]] = []
+        for face_index, face in enumerate(self.faces.astype(int).tolist()):
+            new_face: list[int] = []
+            for vertex in face:
+                component_index = component_by_vertex_face[(vertex, face_index)]
+                key = (vertex, component_index)
+                new_index = vertex_map.get(key)
+                if new_index is None:
+                    new_index = len(points)
+                    vertex_map[key] = new_index
+                    points.append(self.points[vertex].astype(float).tolist())
+                    normals.append(component_normals[component_index].astype(float).tolist())
+                    for channel, values in self.uvs.items():
+                        uvs[channel].append(values[vertex].astype(float).tolist())
+                new_face.append(new_index)
+            new_faces.append(new_face)
+
+        mesh = Mesh(
+            points=np.asarray(points, dtype=np.float64),
+            faces=np.asarray(new_faces, dtype=np.int64),
+            normals=np.asarray(normals, dtype=np.float64),
+            uvs={channel: np.asarray(values, dtype=np.float64) for channel, values in uvs.items()},
+            material_indices=None if self.material_indices is None else self.material_indices.copy(),
+            face_groups={name: values.copy() for name, values in self.face_groups.items()},
+            metadata={
+                **self.metadata,
+                "normal_mode": "hard_edges",
+                "hard_edge_angle": str(hard_edge_angle),
+                "preserve_face_boundaries": str(preserve_face_boundaries).lower(),
+            },
+        )
+        mesh.validate_normals()
+        return mesh
+
+    def compute_tangents(self) -> Mesh:
+        if 0 not in self.uvs or self.triangle_count == 0:
+            mesh = self.copy()
+            mesh.tangents = None
+            return mesh
+        mesh = self if self.normals is not None else self.compute_normals()
+        assert mesh.normals is not None
+        uv = mesh.uvs[0]
+        tangents = np.zeros((mesh.vertex_count, 3), dtype=np.float64)
+        for face in mesh.faces.astype(int).tolist():
+            i0, i1, i2 = face
+            p0, p1, p2 = mesh.points[[i0, i1, i2]]
+            uv0, uv1, uv2 = uv[[i0, i1, i2]]
+            edge1 = p1 - p0
+            edge2 = p2 - p0
+            duv1 = uv1 - uv0
+            duv2 = uv2 - uv0
+            denom = float(duv1[0] * duv2[1] - duv2[0] * duv1[1])
+            if abs(denom) <= 1e-12:
+                continue
+            tangent = (edge1 * duv2[1] - edge2 * duv1[1]) / denom
+            np.add.at(tangents, face, tangent)
+        for index, normal in enumerate(mesh.normals):
+            tangent = tangents[index]
+            tangent = tangent - normal * float(np.dot(normal, tangent))
+            length = float(np.linalg.norm(tangent))
+            tangent = _fallback_tangent(normal) if length <= 0.0 else tangent / length
+            tangents[index] = tangent
+        result = mesh.copy()
+        result.tangents = np.column_stack([tangents, np.ones(mesh.vertex_count, dtype=np.float64)])
+        result.metadata = {**result.metadata, "tangents": "mikktspace_like"}
+        result.validate_normals(require_tangents=True)
+        return result
+
+    def validate_normals(self, *, require_tangents: bool = False) -> None:
+        self.validate()
+        if self.normals is None:
+            raise MeshValidationError("mesh has no normals")
+        lengths = np.linalg.norm(self.normals, axis=1)
+        if not np.allclose(lengths, 1.0, atol=1e-4):
+            raise MeshValidationError("normals must be unit length")
+        if require_tangents and self.tangents is None:
+            raise MeshValidationError("mesh has no tangents")
 
     def subdivide_long_edges(self, max_edge_length: float) -> Mesh:
         if max_edge_length <= 0.0:
@@ -470,6 +653,7 @@ class Mesh:
         mesh = self.copy()
         if self.vertex_count == 0:
             mesh.uvs[channel] = np.empty((0, 2), dtype=np.float64)
+            mesh.tangents = None
             return mesh
         mins, maxs = self.bounds()
         size = maxs - mins
@@ -478,6 +662,7 @@ class Mesh:
         denom[denom == 0.0] = 1.0
         uv = (self.points[:, axes] - mins[axes]) / denom
         mesh.uvs[channel] = uv.astype(np.float64)
+        mesh.tangents = None
         return mesh
 
     def unwrap_uv(self, channel: int = 0) -> Mesh:
@@ -489,6 +674,7 @@ class Mesh:
         if self.triangle_count == 0:
             mesh = self.copy()
             mesh.uvs[channel] = np.empty((0, 2), dtype=np.float64)
+            mesh.tangents = None
             return mesh
 
         vertex_mapping, faces, uvs = xatlas.parametrize(
@@ -501,6 +687,7 @@ class Mesh:
             points=self.points[mapping].copy(),
             faces=np.asarray(faces, dtype=np.int64),
             normals=None if self.normals is None else self.normals[mapping].copy(),
+            tangents=None,
             uvs={**{key: values[mapping].copy() for key, values in self.uvs.items() if key != channel}},
             material_indices=None if self.material_indices is None else self.material_indices.copy(),
             face_groups={name: values.copy() for name, values in self.face_groups.items()},
@@ -632,6 +819,8 @@ class Mesh:
             vertex_attributes = [self.points.astype(np.float32)]
             if self.normals is not None:
                 vertex_attributes.append(self.normals.astype(np.float32))
+            if self.tangents is not None:
+                vertex_attributes.append(self.tangents.astype(np.float32))
             for channel in sorted(self.uvs):
                 vertex_attributes.append(self.uvs[channel].astype(np.float32))
             vertex_stream = np.ascontiguousarray(np.column_stack(vertex_attributes))
@@ -653,6 +842,8 @@ class Mesh:
             mesh.faces = np.asarray(remapped_indices, dtype=np.int64).reshape((-1, 3))
             if self.normals is not None:
                 mesh.normals = self.normals[old_for_new].copy()
+            if self.tangents is not None:
+                mesh.tangents = self.tangents[old_for_new].copy()
             mesh.uvs = {channel: values[old_for_new].copy() for channel, values in self.uvs.items()}
             if self.material_indices is not None and reordered_face_indices is not None:
                 mesh.material_indices = self.material_indices[reordered_face_indices].copy()
@@ -782,6 +973,40 @@ class Mesh:
         if preserve_silhouette:
             groups["silhouette"].update(self._silhouette_face_indices())
         return groups
+
+    def _hard_normal_edges(
+        self,
+        *,
+        hard_edge_angle: float,
+        preserve_face_boundaries: bool,
+    ) -> set[tuple[int, int]]:
+        hard_edges: set[tuple[int, int]] = set()
+        edge_faces = self._edge_faces_map()
+        face_normals = self._face_unit_normals()
+        limit = math.cos(math.radians(hard_edge_angle))
+        face_groups = self._face_group_by_face()
+        for edge, faces in edge_faces.items():
+            if len(faces) != 2:
+                hard_edges.add(edge)
+                continue
+            left, right = faces
+            if self.material_indices is not None and self.material_indices[left] != self.material_indices[right]:
+                hard_edges.add(edge)
+                continue
+            if preserve_face_boundaries and face_groups.get(left) != face_groups.get(right):
+                hard_edges.add(edge)
+                continue
+            cosine = float(np.dot(face_normals[left], face_normals[right]))
+            if cosine < limit:
+                hard_edges.add(edge)
+        return hard_edges
+
+    def _face_group_by_face(self) -> dict[int, str]:
+        result: dict[int, str] = {}
+        for name, values in self.face_groups.items():
+            for face_index in values.astype(int).tolist():
+                result[int(face_index)] = name
+        return result
 
     def _edge_faces_map(self) -> dict[tuple[int, int], list[int]]:
         edge_faces: dict[tuple[int, int], list[int]] = {}
@@ -1066,6 +1291,7 @@ class Mesh:
             "triangles": self.triangle_count,
             "uv_channels": sorted(self.uvs),
             "has_normals": self.normals is not None,
+            "has_tangents": self.tangents is not None,
             "material_indices": material_indices,
             "face_groups": {
                 name: {"count": int(values.shape[0]), "indices": values.astype(int).tolist()}
@@ -1082,3 +1308,14 @@ def _boundary_edges_from_faces(faces: list[list[int]]) -> set[tuple[int, int]]:
             edge = (min(start, end), max(start, end))
             counts[edge] = counts.get(edge, 0) + 1
     return {edge for edge, count in counts.items() if count == 1}
+
+
+def _fallback_tangent(normal: FloatArray) -> FloatArray:
+    axis = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+    if abs(float(np.dot(axis, normal))) > 0.9:
+        axis = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    tangent = axis - normal * float(np.dot(axis, normal))
+    length = float(np.linalg.norm(tangent))
+    if length <= 0.0:
+        return np.array([1.0, 0.0, 0.0], dtype=np.float64)
+    return tangent / length

@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Literal
 
 UVMode = Literal["none", "box", "unwrap"]
+NormalMode = Literal["none", "smooth", "hard_edges", "flat"]
 LODMode = Literal["variants"]
 MergeMode = Literal[
     "all",
@@ -137,14 +138,25 @@ class BrepHealOptions:
 class StageOptions:
     materials: Literal["cad", "display", "none"] = "cad"
     normals: bool = True
+    normal_mode: NormalMode = "smooth"
+    hard_edge_angle: float = 30.0
+    preserve_face_boundaries: bool = False
+    tangents: bool = False
+    validate_normals: bool = False
     uv0: UVMode | None = "box"
     uv1: UVMode | None = None
 
     def __post_init__(self) -> None:
         if self.uv0 is None:
             object.__setattr__(self, "uv0", "none")
+        if self.normal_mode == "none":
+            object.__setattr__(self, "normals", False)
         if self.materials not in {"cad", "display", "none"}:
             raise ValueError("materials must be one of: cad, display, none")
+        if self.normal_mode not in {"none", "smooth", "hard_edges", "flat"}:
+            raise ValueError("normal_mode must be one of: none, smooth, hard_edges, flat")
+        if self.hard_edge_angle <= 0.0 or self.hard_edge_angle > 180.0:
+            raise ValueError("hard_edge_angle must be greater than 0 and no more than 180")
         if self.uv0 not in {"none", "box", "unwrap"}:
             raise ValueError("uv0 must be one of: none, box, unwrap")
         if self.uv1 not in {None, "none", "box", "unwrap"}:

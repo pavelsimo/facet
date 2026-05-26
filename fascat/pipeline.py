@@ -272,11 +272,29 @@ def stage(
     *,
     materials: Literal["cad", "display", "none"] = "cad",
     normals: bool = True,
+    normal_mode: Literal["none", "smooth", "hard_edges", "flat"] = "smooth",
+    hard_edge_angle: float = 30.0,
+    preserve_face_boundaries: bool = False,
+    tangents: bool = False,
+    validate_normals: bool = False,
     uv0: UVMode = "box",
     uv1: UVMode | None = None,
     where: Filter | None = None,
 ) -> Asset:
-    return asset.stage(StageOptions(materials=materials, normals=normals, uv0=uv0, uv1=uv1), where=where)
+    return asset.stage(
+        StageOptions(
+            materials=materials,
+            normals=normals,
+            normal_mode=normal_mode,
+            hard_edge_angle=hard_edge_angle,
+            preserve_face_boundaries=preserve_face_boundaries,
+            tangents=tangents,
+            validate_normals=validate_normals,
+            uv0=uv0,
+            uv1=uv1,
+        ),
+        where=where,
+    )
 
 
 def optimize(

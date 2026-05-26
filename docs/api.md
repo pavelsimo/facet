@@ -40,6 +40,11 @@ asset = asset.stage(
     fc.StageOptions(
         materials="cad",
         normals=True,
+        normal_mode="smooth",
+        hard_edge_angle=30.0,
+        preserve_face_boundaries=False,
+        tangents=False,
+        validate_normals=False,
         uv0="box",
         uv1=None,
     )
@@ -236,6 +241,27 @@ asset = asset.optimize(
 ```
 
 Protected-feature counts are stored as part metadata under `simplification_preserved_features`. Parts below `small_part_triangle_threshold` are left unsimplified when `preserve_small_parts=True`.
+
+## Hard-Edge Normals And Tangents
+
+Staging can generate smooth, flat, or hard-edge normals and glTF-ready tangents. Hard-edge mode splits vertices across hard normal edges, material boundaries, and optional CAD face-group boundaries.
+
+```python
+asset = asset.stage(
+    fc.StageOptions(
+        materials="cad",
+        normals=True,
+        normal_mode="hard_edges",
+        hard_edge_angle=30.0,
+        preserve_face_boundaries=True,
+        tangents=True,
+        validate_normals=True,
+        uv0="box",
+    )
+)
+```
+
+Tangents require UV0. glTF export writes a `TANGENT` vertex attribute when staged meshes contain tangent data.
 
 ## One-shot conversion
 

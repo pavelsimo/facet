@@ -124,6 +124,35 @@ def test_mesh_uses_angle_weighted_normals_by_default() -> None:
     assert np.linalg.norm(angle_weighted.normals[0]) == pytest.approx(1.0)
 
 
+def test_hard_edge_normals_split_vertices_across_sharp_edges() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float),
+        faces=np.array([[0, 1, 2], [0, 3, 1]], dtype=int),
+    )
+
+    hard = mesh.compute_hard_edge_normals(hard_edge_angle=30.0)
+
+    assert hard.vertex_count > mesh.vertex_count
+    assert hard.normals is not None
+    assert np.isfinite(hard.normals).all()
+    assert np.allclose(np.linalg.norm(hard.normals, axis=1), 1.0)
+
+
+def test_tangents_are_generated_from_uv0_and_normals() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=float),
+        faces=np.array([[0, 1, 2]], dtype=int),
+        uvs={0: np.array([[0, 0], [1, 0], [0, 1]], dtype=float)},
+    ).compute_normals()
+
+    tangent_mesh = mesh.compute_tangents()
+
+    assert tangent_mesh.tangents is not None
+    assert tangent_mesh.tangents.shape == (3, 4)
+    assert np.isfinite(tangent_mesh.tangents).all()
+    assert np.allclose(np.linalg.norm(tangent_mesh.tangents[:, :3], axis=1), 1.0)
+
+
 def test_mesh_validation_rejects_out_of_range_indices() -> None:
     mesh = Mesh(
         points=np.array([[0, 0, 0], [1, 0, 0]], dtype=float),
@@ -156,6 +185,11 @@ def test_mesh_validation_rejects_invalid_core_arrays(mesh: Mesh, message: str) -
         (
             valid_triangle(normals=np.array([[0, 0, 1], [0, np.inf, 1], [0, 0, 1]], dtype=float)),
             "normals must not contain NaN or Inf values",
+        ),
+        (valid_triangle(tangents=np.array([[1, 0, 0, 1]], dtype=float)), "tangents must have shape"),
+        (
+            valid_triangle(tangents=np.array([[1, 0, 0, 1], [np.nan, 0, 0, 1], [1, 0, 0, 1]], dtype=float)),
+            "tangents must not contain NaN or Inf values",
         ),
         (valid_triangle(uvs={0: np.array([0, 0], dtype=float)}), "uv channel 0 must have shape"),
         (valid_triangle(uvs={0: np.array([[0, 0], [1, 0]], dtype=float)}), "uv channel 0 must match"),

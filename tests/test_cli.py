@@ -114,6 +114,8 @@ def test_convert_help() -> None:
     assert "--max-edge-length" in plain(result.output)
     assert "--quality-report" in plain(result.output)
     assert "--materials" in plain(result.output)
+    assert "--normals" in plain(result.output)
+    assert "--tangents" in plain(result.output)
     assert "--uv1" in plain(result.output)
     assert "--no-preserve-instances" in plain(result.output)
     assert "--preserve-hard-edges" in plain(result.output)

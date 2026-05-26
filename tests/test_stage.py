@@ -88,6 +88,35 @@ def test_stage_preserves_existing_normals_when_generation_is_disabled() -> None:
     assert np.array_equal(staged_mesh.normals, original_normals)
 
 
+def test_stage_generates_hard_edge_normals_and_tangents() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float),
+        faces=np.array([[0, 1, 2], [0, 3, 1]], dtype=int),
+    )
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="node", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", mesh=mesh)},
+    )
+
+    staged = asset.stage(
+        StageOptions(
+            normal_mode="hard_edges",
+            hard_edge_angle=30.0,
+            tangents=True,
+            validate_normals=True,
+            uv0="box",
+            uv1=None,
+        )
+    )
+    staged_mesh = staged.parts["part"].mesh
+
+    assert staged_mesh is not None
+    assert staged_mesh.vertex_count > mesh.vertex_count
+    assert staged_mesh.normals is not None
+    assert staged_mesh.tangents is not None
+    assert staged_mesh.tangents.shape == (staged_mesh.vertex_count, 4)
+
+
 @pytest.mark.requires_xatlas
 def test_stage_unwrap_uv_uses_xatlas_backend() -> None:
     pytest.importorskip("xatlas")
