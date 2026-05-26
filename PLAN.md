@@ -698,6 +698,7 @@ Pipeline tests:
 - Conversion reports include timed write and validation steps.
 - Conversion progress callbacks receive source and per-stage stats.
 - Repeated parts can be preserved or duplicated per occurrence.
+- Optimization tests assert target triangle budgets take precedence over ratio.
 - Functional API wrappers cover stage, optimize, and LOD operations.
 
 USD tests:
@@ -708,9 +709,10 @@ USD tests:
 - Assert stage units and up-axis are authored.
 - Assert face counts, indices, and points are valid.
 - Assert materials bind correctly.
+- Assert UV0 primvars, normals, and sanitized-name original metadata are authored.
 - Assert `displayColor` fallback is authored.
 - Assert per-face material subsets are authored when material indices require them.
-- Assert LOD variants exist when requested.
+- Assert LOD variants exist with `lod0` selected when requested.
 - Mark USD-backed tests with `pytest.mark.requires_usd`.
 
 STEP tests:
@@ -719,6 +721,7 @@ STEP tests:
 - Start with generated/simple STEP fixtures.
 - Test hierarchy, names, units, color import, and repeated part detection.
 - Test `Tessellation.max_edge_length` on a STEP-backed tessellation path.
+- Test `Tessellation.keep_brep` controls source-shape retention after tessellation.
 - Test stable STEP IDs include source identity.
 - Test importer part identity reuses matching source, shape, and material fingerprints before tessellation.
 - Test STEP face color material plans map to mesh material indices for USD subsets.

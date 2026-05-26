@@ -13,7 +13,7 @@ from fascat.options import OptimizeOptions
 
 pytestmark = pytest.mark.requires_usd
 pytest.importorskip("pxr")
-from pxr import Usd, UsdGeom  # noqa: E402
+from pxr import Usd, UsdGeom, UsdShade  # noqa: E402
 
 
 def cube_mesh() -> Mesh:
@@ -72,10 +72,48 @@ def test_usd_export_authors_mesh_material_units_and_lods(tmp_path: Path) -> None
     assert UsdGeom.GetStageMetersPerUnit(stage) == 0.001
     assert UsdGeom.GetStageUpAxis(stage) == UsdGeom.Tokens.z
     prim = stage.GetPrimAtPath("/Scene/Cube_Occurrence")
-    assert prim.GetVariantSets().GetVariantSet("lod").GetVariantSelection() == "lod0"
+    variant_set = prim.GetVariantSets().GetVariantSet("lod")
+    assert variant_set.GetVariantSelection() == "lod0"
+    assert variant_set.GetVariantNames() == ["lod0", "lod1"]
     mesh_prim = next(prim for prim in Usd.PrimRange(stage.GetDefaultPrim()) if prim.IsA(UsdGeom.Mesh))
     assert UsdGeom.Mesh(mesh_prim).GetSubdivisionSchemeAttr().Get() == "none"
     assert UsdGeom.Mesh(mesh_prim).GetDisplayColorAttr().Get()[0] == (1.0, 0.0, 0.0)
+
+
+def test_usd_export_authors_uv0_normals_and_original_names(tmp_path: Path) -> None:
+    mesh = cube_mesh()
+    root = Node(
+        id="root",
+        name="root",
+        children=[Node(id="node", name="123 motor housing!", part_id="part")],
+    )
+    asset = Asset(
+        root=root,
+        parts={"part": Part(id="part", name="housing source name", mesh=mesh)},
+        materials={},
+    )
+    output = tmp_path / "attributes.usda"
+
+    write_usd(asset, output)
+
+    stage = Usd.Stage.Open(str(output))
+    assert stage is not None
+    xform_prim = stage.GetPrimAtPath("/Scene/_123_motor_housing")
+    assert xform_prim
+    assert xform_prim.GetCustomDataByKey("fascat:originalName") == "123 motor housing!"
+
+    mesh_prim = stage.GetPrimAtPath("/Scene/_123_motor_housing/Mesh")
+    usd_mesh = UsdGeom.Mesh(mesh_prim)
+    normals = usd_mesh.GetNormalsAttr().Get()
+    st = UsdGeom.PrimvarsAPI(usd_mesh).GetPrimvar("st")
+
+    assert mesh_prim.GetCustomDataByKey("fascat:originalName") == "housing source name"
+    assert normals is not None
+    assert len(normals) == mesh.vertex_count
+    assert usd_mesh.GetNormalsInterpolation() == UsdGeom.Tokens.vertex
+    assert st
+    assert st.GetInterpolation() == UsdGeom.Tokens.vertex
+    assert len(st.Get()) == mesh.vertex_count
 
 
 def test_usd_export_uses_instanceable_references_for_repeated_parts(tmp_path: Path) -> None:
@@ -144,9 +182,13 @@ def test_usd_export_authors_face_material_subsets(tmp_path: Path) -> None:
     mesh_prim = next(prim for prim in Usd.PrimRange(stage.GetDefaultPrim()) if prim.IsA(UsdGeom.Mesh))
     subsets = [prim for prim in Usd.PrimRange(mesh_prim) if prim.GetTypeName() == "GeomSubset"]
     subset_indices = sorted(UsdGeom.Subset(prim).GetIndicesAttr().Get()[0] for prim in subsets)
+    subset_bindings = [
+        UsdShade.MaterialBindingAPI(prim).ComputeBoundMaterial()[0].GetPath().pathString for prim in subsets
+    ]
 
     assert len(subsets) == 2
     assert subset_indices == [0, 1]
+    assert sorted(subset_bindings) == ["/Materials/blue", "/Materials/red"]
 
 
 def test_usd_export_does_not_instance_when_instances_are_not_preserved(tmp_path: Path) -> None:
