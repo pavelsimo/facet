@@ -41,6 +41,7 @@ fascat convert input.step output.usdc \
   --angle 15 \
   --max-edge-length 25 \
   --target-triangles 500000 \
+  --materials display \
   --uv1 box \
   --lods 0.5,0.25,0.1
 ```

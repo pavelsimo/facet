@@ -56,6 +56,7 @@ fascat convert motor.step motor.usdc \
   --angle 15 \
   --max-edge-length 25 \
   --target-triangles 500000 \
+  --materials display \
   --uv1 box \
   --lods 0.5,0.25,0.1
 
@@ -90,7 +91,7 @@ fc.convert(
     "pump.step",
     "pump.usdc",
     tessellation=fc.Tessellation(sag=0.1, angle=15, max_edge_length=25),
-    stage=fc.StageOptions(uv0="box", uv1="unwrap"),
+    stage=fc.StageOptions(materials="cad", uv0="box", uv1="unwrap"),
     optimize=fc.OptimizeOptions(target_triangles=1_000_000, preserve_instances=True),
     lods=fc.LODOptions((0.5, 0.25, 0.1)),
 )

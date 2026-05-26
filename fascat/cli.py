@@ -74,6 +74,12 @@ class UVMode(str, Enum):
     UNWRAP = "unwrap"
 
 
+class MaterialMode(str, Enum):
+    CAD = "cad"
+    DISPLAY = "display"
+    NONE = "none"
+
+
 @dataclass(frozen=True)
 class CliState:
     verbose: bool
@@ -216,6 +222,10 @@ def cmd_convert(
     ] = None,
     uv0: Annotated[UVMode, typer.Option("--uv0", help="UV0 generation mode.")] = UVMode.BOX,
     uv1: Annotated[UVMode, typer.Option("--uv1", help="UV1 generation mode.")] = UVMode.NONE,
+    materials: Annotated[
+        MaterialMode,
+        typer.Option("--materials", help="Material staging mode: cad, display, or none."),
+    ] = MaterialMode.CAD,
     preserve_instances: Annotated[
         bool,
         typer.Option(
@@ -242,6 +252,7 @@ def cmd_convert(
         "lods": None,
         "uv0": uv0.value,
         "uv1": uv1.value,
+        "materials": materials.value,
         "preserve_instances": preserve_instances,
         "debug": debug,
         "report": str(report) if report else None,
@@ -296,7 +307,7 @@ def cmd_convert(
                 ratio=ratio,
                 preserve_instances=preserve_instances,
             )
-        stage_options = replace(profile_options.stage, uv0=uv0.value, uv1=uv1.value)
+        stage_options = replace(profile_options.stage, materials=materials.value, uv0=uv0.value, uv1=uv1.value)
         lod_options = LODOptions(tuple(lod_values)) if lod_values is not None else profile_options.lods
         asset = _convert_for_cli(
             input_path,

@@ -9,6 +9,7 @@ from fascat.asset import Asset
 from fascat.io.step import read_step
 from fascat.io.usd import validate_usd, write_usd
 from fascat.options import ConversionProfile, LODOptions, OptimizeOptions, StageOptions, Tessellation, UVMode
+from fascat.report import timed_step
 
 
 def convert(
@@ -49,14 +50,30 @@ def convert(
         asset = asset.lods(lod_options)
         if progress is not None:
             progress("lods", asset.stats())
-    asset.report.finish(asset.stats())
-    write_usd(asset, output_path, debug=debug)
+    with timed_step() as timer:
+        write_usd(asset, output_path, debug=debug)
+    asset.report.add_step(
+        "write",
+        options={"format": "OpenUSD", "debug": debug},
+        before=asset.stats(),
+        after=asset.stats(),
+        duration=timer.duration,
+    )
     if progress is not None:
         progress("write", asset.stats())
     if validate_output:
-        validate_usd(output_path)
+        with timed_step() as timer:
+            validation_stats = validate_usd(output_path)
+        asset.report.add_step(
+            "validate",
+            options={"backend": "usd-core"},
+            before=asset.stats(),
+            after=validation_stats,
+            duration=timer.duration,
+        )
         if progress is not None:
             progress("validate", asset.stats())
+    asset.report.finish(asset.stats())
     return asset
 
 

@@ -48,6 +48,7 @@ fascat inspect input.step --json
 | `--lods` | profile value | Comma-separated LOD ratios, for example `0.5,0.25,0.1` |
 | `--uv0` | `box` | UV0 generation mode: `none`, `box`, or `unwrap` |
 | `--uv1` | `none` | UV1 generation mode: `none`, `box`, or `unwrap` |
+| `--materials` | `cad` | Material staging mode: `cad`, `display`, or `none` |
 | `--preserve-instances / --no-preserve-instances` | `true` | Preserve repeated parts as shared instances, or duplicate per occurrence |
 | `--debug` | `false` | Require text `.usd` or `.usda` output for debugging |
 | `--report` | unset | Write a JSON conversion report sidecar |

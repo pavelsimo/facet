@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 from typing import NamedTuple
@@ -77,6 +78,7 @@ def test_convert_help() -> None:
     assert result.exit_code == 0
     assert "--target-triangles" in plain(result.output)
     assert "--max-edge-length" in plain(result.output)
+    assert "--materials" in plain(result.output)
     assert "--uv1" in plain(result.output)
     assert "--no-preserve-instances" in plain(result.output)
 
@@ -98,6 +100,12 @@ def test_convert_dry_run_defaults_output_to_usdc() -> None:
     result = runner.invoke(app, ["--json", "--dry-run", "convert", "input.step"])
     assert result.exit_code == 0
     assert '"output": "input.usdc"' in result.output
+
+
+def test_convert_dry_run_accepts_material_staging_mode() -> None:
+    result = runner.invoke(app, ["--json", "--dry-run", "convert", "input.step", "--materials", "display"])
+    assert result.exit_code == 0
+    assert '"materials": "display"' in result.output
 
 
 def test_inspect_dry_run() -> None:
@@ -150,6 +158,8 @@ def test_convert_fixture_writes_usd_and_report(tmp_path: Path) -> None:
             "0.5",
             "--uv1",
             "box",
+            "--materials",
+            "display",
             "--report",
             str(report_file),
         ],
@@ -158,7 +168,13 @@ def test_convert_fixture_writes_usd_and_report(tmp_path: Path) -> None:
     assert output_file.exists()
     assert report_file.exists()
     assert "Converted" in result.output
-    assert '"steps"' in report_file.read_text(encoding="utf-8")
+    report = json.loads(report_file.read_text(encoding="utf-8"))
+    step_names = [step["name"] for step in report["steps"]]
+    assert "write" in step_names
+    assert "validate" in step_names
+    assert report["finished_at"] is not None
+    assert report["output_stats"]["materials"] == 0
+    assert report["output_stats"]["triangles"] <= 120
 
 
 def test_convert_existing_output_requires_force(tmp_path: Path) -> None:

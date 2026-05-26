@@ -693,6 +693,7 @@ Pipeline tests:
 - `Tessellation`, `RepairOptions`, `StageOptions`, `OptimizeOptions`, and `LODOptions` validate bad inputs.
 - Profiles produce deterministic option sets.
 - Operation reports include before/after counts.
+- Conversion reports include timed write and validation steps.
 - Conversion progress callbacks receive source and per-stage stats.
 - Repeated parts can be preserved or duplicated per occurrence.
 - Functional API wrappers cover stage, optimize, and LOD operations.
@@ -730,6 +731,7 @@ CLI tests:
 - `fascat convert` rejects `--debug` with binary `.usdc`.
 - `fascat convert` emits source and per-stage progress on stderr.
 - `fascat convert` validates generated USD before reporting success.
+- `fascat convert --materials` exposes CAD material, displayColor-only, and no-material staging modes.
 
 ## 15. Milestones
 
