@@ -732,6 +732,7 @@ USD tests:
 - Assert mesh extents are authored.
 - Assert both `Asset.write_usd()` and `fc.write_usd()` write valid stages.
 - Assert `displayColor` fallback is authored.
+- Assert USD validation follows instanceable repeated-part prototypes.
 - Assert per-face material subsets are authored when material indices require them.
 - Assert LOD variants exist with `lod0` selected when requested.
 - Assert USD validation checks every authored `lod` variant, not only the selected default variant.

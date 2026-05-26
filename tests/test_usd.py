@@ -277,12 +277,15 @@ def test_usd_export_uses_instanceable_references_for_repeated_parts(tmp_path: Pa
     output = tmp_path / "instances.usda"
 
     write_usd(asset, output)
+    stats = validate_usd(output)
 
     stage = Usd.Stage.Open(str(output))
     assert stage is not None
     assert stage.GetPrimAtPath("/Scene/Cube_A").IsInstanceable()
     assert stage.GetPrimAtPath("/Scene/Cube_B").IsInstanceable()
     assert stage.GetPrimAtPath("/__Prototypes/cube_lod0/Mesh")
+    assert stats["meshes"] == 2
+    assert stats["triangles"] == mesh.triangle_count * 2
 
 
 def test_usd_export_marks_repeated_parts_instanceable_across_assemblies(tmp_path: Path) -> None:

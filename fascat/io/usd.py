@@ -65,11 +65,35 @@ def validate_usd(path: str | Path) -> dict[str, int]:
     return stats
 
 
-def _validate_mesh_tree(root_prim: Any, Usd: Any, UsdGeom: Any) -> dict[str, int]:
+def _validate_mesh_tree(
+    root_prim: Any,
+    Usd: Any,
+    UsdGeom: Any,
+    prototype_stack: set[str] | None = None,
+) -> dict[str, int]:
+    if prototype_stack is None:
+        prototype_stack = set()
     mesh_count = 0
     point_count = 0
     face_count = 0
     for prim in Usd.PrimRange(root_prim):
+        if prim.IsInstance():
+            prototype = prim.GetPrototype()
+            if not prototype:
+                raise RuntimeError(f"instance {prim.GetPath()} has no prototype")
+            prototype_key = str(prototype.GetPath())
+            if prototype_key in prototype_stack:
+                raise RuntimeError(f"instance {prim.GetPath()} references recursive prototype {prototype.GetPath()}")
+            prototype_stats = _validate_mesh_tree(
+                prototype,
+                Usd,
+                UsdGeom,
+                prototype_stack | {prototype_key},
+            )
+            mesh_count += prototype_stats["meshes"]
+            point_count += prototype_stats["points"]
+            face_count += prototype_stats["triangles"]
+            continue
         if not prim.IsA(UsdGeom.Mesh):
             continue
         mesh = UsdGeom.Mesh(prim)
