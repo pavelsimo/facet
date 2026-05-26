@@ -11,6 +11,46 @@ import fascat as fc
 pytestmark = [pytest.mark.requires_ocp, pytest.mark.requires_usd]
 
 
+def _write_repeated_box_step(path: Path) -> None:
+    from OCP.BRep import BRep_Builder
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+    from OCP.gp import gp_Trsf, gp_Vec
+    from OCP.IFSelect import IFSelect_RetDone
+    from OCP.STEPCAFControl import STEPCAFControl_Writer
+    from OCP.STEPControl import STEPControl_AsIs
+    from OCP.TCollection import TCollection_ExtendedString
+    from OCP.TDataStd import TDataStd_Name
+    from OCP.TDocStd import TDocStd_Document
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.TopoDS import TopoDS_Compound
+    from OCP.XCAFApp import XCAFApp_Application
+    from OCP.XCAFDoc import XCAFDoc_DocumentTool
+
+    def located_shape(x: float, y: float, z: float) -> object:
+        transform = gp_Trsf()
+        transform.SetTranslation(gp_Vec(x, y, z))
+        return box.Located(TopLoc_Location(transform))
+
+    app = XCAFApp_Application.GetApplication_s()
+    document = TDocStd_Document(TCollection_ExtendedString("fascat-test"))
+    app.NewDocument(TCollection_ExtendedString("MDTV-XCAF"), document)
+    shape_tool = XCAFDoc_DocumentTool.ShapeTool_s(document.Main())
+    box = BRepPrimAPI_MakeBox(1.0, 2.0, 3.0).Shape()
+    assembly_shape = TopoDS_Compound()
+    builder = BRep_Builder()
+    builder.MakeCompound(assembly_shape)
+    builder.Add(assembly_shape, located_shape(0.0, 0.0, 0.0))
+    builder.Add(assembly_shape, located_shape(10.0, 0.0, 0.0))
+    assembly_label = shape_tool.AddShape(assembly_shape, True, True)
+    TDataStd_Name.Set_s(assembly_label, TCollection_ExtendedString("Generated Assembly"))
+
+    writer = STEPCAFControl_Writer()
+    writer.SetNameMode(True)
+    writer.SetColorMode(True)
+    assert writer.Transfer(document, STEPControl_AsIs)
+    assert writer.Write(str(path)) == IFSelect_RetDone
+
+
 @pytest.mark.parametrize("fixture", sorted(Path("tests/fixtures").glob("*.step")))
 def test_step_fixtures_import_with_names_units_and_parts(fixture: Path) -> None:
     asset = fc.read_step(fixture)
@@ -30,6 +70,45 @@ def test_step_fixtures_import_with_names_units_and_parts(fixture: Path) -> None:
         "triangles": 0,
     }
     assert asset.report.steps[0].after == asset.stats()
+
+
+def test_generated_step_assembly_preserves_repeated_occurrences_and_transforms_in_usd(tmp_path: Path) -> None:
+    from pxr import Usd, UsdGeom
+
+    step_file = tmp_path / "generated-repeated-assembly.step"
+    output = tmp_path / "generated-repeated-assembly.usda"
+    _write_repeated_box_step(step_file)
+
+    imported = fc.read_step(step_file)
+    occurrences = [node for node in imported.root.walk() if node.part_id is not None]
+
+    assert imported.part_count == 1
+    assert imported.occurrence_count == 2
+    assert len({node.part_id for node in occurrences}) == 1
+    assert any(np.allclose(node.transform[:3, 3], [10.0, 0.0, 0.0]) for node in occurrences)
+
+    converted = fc.convert(
+        step_file,
+        output,
+        tessellation=fc.Tessellation(sag=0.2, angle=20),
+        optimize=fc.OptimizeOptions(simplify=False, optimize_buffers=False),
+        lods=None,
+    )
+    validation_stats = fc.validate_usd(output)
+    stage = Usd.Stage.Open(str(output))
+    assert stage is not None
+    instance_prims = [prim for prim in Usd.PrimRange(stage.GetDefaultPrim()) if prim.IsInstanceable()]
+    translated_instances = [prim for prim in instance_prims if UsdGeom.Xformable(prim).GetOrderedXformOps()]
+    transform_ops = UsdGeom.Xformable(translated_instances[0]).GetOrderedXformOps()
+
+    assert converted.part_count == 1
+    assert converted.occurrence_count == 2
+    assert validation_stats["meshes"] == 2
+    assert validation_stats["triangles"] == converted.triangle_count * 2
+    assert len(instance_prims) == 2
+    assert len(translated_instances) == 1
+    assert all(prim.IsInstance() for prim in instance_prims)
+    assert np.allclose(np.asarray(transform_ops[0].Get())[:3, 3], [10.0, 0.0, 0.0])
 
 
 def test_step_ids_include_source_identity(tmp_path: Path) -> None:
