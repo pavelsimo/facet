@@ -739,6 +739,7 @@ STEP tests:
 - Add fixtures only if license-clean.
 - Start with generated/simple STEP fixtures.
 - Test hierarchy, names, units, color import, and repeated part detection.
+- Test a colored STEP fixture imports CAD colors and exports them as visible USD material/displayColor data.
 - Test `Tessellation.max_edge_length` on a STEP-backed tessellation path.
 - Test `Tessellation.keep_brep` controls source-shape retention after tessellation.
 - Test stable STEP IDs include source identity.

@@ -46,6 +46,40 @@ def test_step_ids_include_source_identity(tmp_path: Path) -> None:
     assert all("source_identity" in part.metadata for part in original_a.parts.values())
 
 
+def test_step_cad_color_imports_and_exports_as_visible_usd_material(tmp_path: Path) -> None:
+    from pxr import Usd, UsdGeom, UsdShade
+
+    fixture = Path("tests/fixtures/radial-fan-50x15.step")
+    expected_color = pytest.approx((0.009721217676997185, 0.009721217676997185, 0.009721217676997185), abs=1e-6)
+
+    imported = fc.read_step(fixture)
+    material = next(iter(imported.materials.values()))
+    part = next(iter(imported.parts.values()))
+
+    assert imported.units == "metre"
+    assert imported.meters_per_unit == pytest.approx(1.0)
+    assert part.material_ids == [material.id]
+    assert material.base_color[:3] == expected_color
+
+    output = tmp_path / "radial.usda"
+    fc.convert(
+        fixture,
+        output,
+        tessellation=fc.Tessellation(sag=0.002, angle=20),
+        optimize=fc.OptimizeOptions(target_triangles=80),
+        lods=None,
+    )
+
+    stage = Usd.Stage.Open(str(output))
+    assert stage is not None
+    mesh_prim = next(prim for prim in Usd.PrimRange(stage.GetDefaultPrim()) if prim.IsA(UsdGeom.Mesh))
+    usd_mesh = UsdGeom.Mesh(mesh_prim)
+    bound_material = UsdShade.MaterialBindingAPI(mesh_prim).ComputeBoundMaterial()[0]
+
+    assert tuple(usd_mesh.GetDisplayColorAttr().Get()[0]) == expected_color
+    assert bound_material.GetPrim().GetCustomDataByKey("fascat:materialId") == material.id
+
+
 def test_step_fixture_converts_to_valid_usd_with_report(tmp_path: Path) -> None:
     output = tmp_path / "spool.usda"
 
