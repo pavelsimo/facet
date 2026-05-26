@@ -705,6 +705,8 @@ Pipeline tests:
 - Conversion progress callbacks receive source and per-stage stats.
 - Repeated parts can be preserved or duplicated per occurrence.
 - Optimization tests assert target triangle budgets take precedence over ratio.
+- Optimization tests assert target triangle budgets are allocated across unique parts without overshooting when feasible.
+- Optimization reports warn when a target is below the one-triangle-per-unique-mesh minimum.
 - Functional API wrappers cover tessellate, stage, optimize, and LOD operations.
 - Public node dictionaries preserve transforms.
 

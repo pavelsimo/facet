@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from fascat.asset import Asset, Part
 from fascat.options import OptimizeOptions
 
@@ -9,12 +11,17 @@ def optimize_asset(asset: Asset, options: OptimizeOptions) -> Asset:
     if not options.preserve_instances:
         result = _duplicate_parts_per_occurrence(result)
     total_triangles = result.triangle_count
+    targets = _targets_for_parts(result.parts, total_triangles, options.target_triangles)
+    if targets is not None and sum(targets.values()) > (options.target_triangles or 0):
+        result.report.add_warning(
+            "target_triangles is lower than the number of non-empty unique meshes; using one triangle per mesh"
+        )
     for part in result.parts.values():
         if part.mesh is None:
             continue
         mesh = part.mesh
         if options.simplify:
-            target = _target_for_part(mesh.triangle_count, total_triangles, options.target_triangles)
+            target = targets.get(part.id) if targets is not None else None
             mesh = mesh.simplify(target_triangles=target, ratio=None if target is not None else options.ratio)
         if options.optimize_buffers:
             mesh = mesh.optimize_buffers()
@@ -47,8 +54,51 @@ def _duplicate_parts_per_occurrence(asset: Asset) -> Asset:
     return asset
 
 
-def _target_for_part(part_triangles: int, total_triangles: int, target_triangles: int | None) -> int | None:
+def _targets_for_parts(
+    parts: dict[str, Part],
+    total_triangles: int,
+    target_triangles: int | None,
+) -> dict[str, int] | None:
     if target_triangles is None or total_triangles <= target_triangles or total_triangles == 0:
         return None
-    share = part_triangles / total_triangles
-    return max(1, int(round(target_triangles * share)))
+
+    eligible = [
+        (part_id, part.mesh.triangle_count)
+        for part_id, part in parts.items()
+        if part.mesh is not None and part.mesh.triangle_count > 0
+    ]
+    if not eligible:
+        return None
+
+    minimum_total = len(eligible)
+    if target_triangles <= minimum_total:
+        return {part_id: 1 for part_id, _triangles in eligible}
+
+    targets: dict[str, int] = {}
+    remainders: list[tuple[float, int, str]] = []
+    assigned = 0
+    exact_targets: dict[str, float] = {}
+    for part_id, triangle_count in eligible:
+        exact = target_triangles * (triangle_count / total_triangles)
+        exact_targets[part_id] = exact
+        base = max(1, int(math.floor(exact)))
+        targets[part_id] = base
+        assigned += base
+        remainders.append((exact - base, triangle_count, part_id))
+
+    while assigned > target_triangles:
+        removable = [
+            (targets[part_id] - exact_targets[part_id], targets[part_id], part_id)
+            for part_id in targets
+            if targets[part_id] > 1
+        ]
+        if not removable:
+            break
+        _overage, _target, part_id = max(removable)
+        targets[part_id] -= 1
+        assigned -= 1
+
+    remaining = max(0, target_triangles - assigned)
+    for _remainder, _triangle_count, part_id in sorted(remainders, reverse=True)[:remaining]:
+        targets[part_id] += 1
+    return targets

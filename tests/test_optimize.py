@@ -7,6 +7,17 @@ from fascat.mesh import Mesh
 from fascat.options import OptimizeOptions
 
 
+def mesh_with_triangles(count: int) -> Mesh:
+    points = []
+    faces = []
+    for index in range(count):
+        offset = len(points)
+        base = float(index * 2)
+        points.extend([[base, 0, 0], [base + 1, 0, 0], [base, 1, 0]])
+        faces.append([offset, offset + 1, offset + 2])
+    return Mesh(points=np.asarray(points, dtype=float), faces=np.asarray(faces, dtype=int))
+
+
 def test_optimize_can_duplicate_repeated_parts_per_occurrence() -> None:
     mesh = Mesh(
         points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=float),
@@ -56,3 +67,62 @@ def test_target_triangles_wins_over_ratio() -> None:
 
     assert optimized_mesh is not None
     assert optimized_mesh.triangle_count == 3
+
+
+def test_target_triangle_budget_is_allocated_across_unique_parts(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    calls: dict[int, int] = {}
+
+    def fake_simplify(self: Mesh, *, target_triangles: int | None = None, ratio: float | None = None) -> Mesh:
+        assert ratio is None
+        assert target_triangles is not None
+        calls[id(self)] = target_triangles
+        return mesh_with_triangles(target_triangles)
+
+    monkeypatch.setattr(Mesh, "simplify", fake_simplify)
+    parts = {
+        f"part_{index}": Part(id=f"part_{index}", name=f"Part {index}", mesh=mesh_with_triangles(4))
+        for index in range(3)
+    }
+    asset = Asset(
+        root=Node(
+            id="root",
+            name="root",
+            children=[Node(id=f"node_{index}", name=f"Node {index}", part_id=f"part_{index}") for index in range(3)],
+        ),
+        parts=parts,
+    )
+
+    optimized = asset.optimize(OptimizeOptions(target_triangles=5, ratio=0.25, optimize_buffers=False))
+
+    counts = sorted(part.mesh.triangle_count for part in optimized.parts.values() if part.mesh is not None)
+    assert sum(counts) == 5
+    assert counts == [1, 2, 2]
+    assert sorted(calls.values()) == [1, 2, 2]
+
+
+def test_target_triangle_budget_warns_when_unique_mesh_minimum_exceeds_target(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(
+        Mesh,
+        "simplify",
+        lambda _self, *, target_triangles=None, ratio=None: mesh_with_triangles(int(target_triangles or 1)),
+    )
+    parts = {
+        f"part_{index}": Part(id=f"part_{index}", name=f"Part {index}", mesh=mesh_with_triangles(2))
+        for index in range(3)
+    }
+    asset = Asset(
+        root=Node(
+            id="root",
+            name="root",
+            children=[Node(id=f"node_{index}", name=f"Node {index}", part_id=f"part_{index}") for index in range(3)],
+        ),
+        parts=parts,
+    )
+
+    optimized = asset.optimize(OptimizeOptions(target_triangles=2, optimize_buffers=False))
+
+    assert optimized.triangle_count == 3
+    assert optimized.report.warnings == [
+        "target_triangles is lower than the number of non-empty unique meshes; using one triangle per mesh"
+    ]
+    assert optimized.report.steps[-1].warnings == optimized.report.warnings
