@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Literal
 
 from fascat import profiles
 from fascat.asset import Asset
 from fascat.io.step import read_step
 from fascat.io.usd import validate_usd, write_usd
-from fascat.options import ConversionProfile, LODOptions, OptimizeOptions, StageOptions, Tessellation
+from fascat.options import ConversionProfile, LODOptions, OptimizeOptions, StageOptions, Tessellation, UVMode
 
 
 def convert(
@@ -59,8 +60,26 @@ def convert(
     return asset
 
 
-def tessellate(asset: Asset, *, sag: float = 0.1, angle: float = 15.0) -> Asset:
-    return asset.tessellate(Tessellation(sag=sag, angle=angle))
+def tessellate(
+    asset: Asset,
+    *,
+    sag: float = 0.1,
+    angle: float = 15.0,
+    relative: bool = True,
+    max_edge_length: float | None = None,
+    create_normals: bool = True,
+    keep_brep: bool = False,
+) -> Asset:
+    return asset.tessellate(
+        Tessellation(
+            sag=sag,
+            angle=angle,
+            relative=relative,
+            max_edge_length=max_edge_length,
+            create_normals=create_normals,
+            keep_brep=keep_brep,
+        )
+    )
 
 
 def repair(asset: Asset, *, tolerance: float = 0.0) -> Asset:
@@ -69,5 +88,36 @@ def repair(asset: Asset, *, tolerance: float = 0.0) -> Asset:
     return asset.repair(RepairOptions(tolerance=tolerance))
 
 
-def optimize(asset: Asset, *, target_triangles: int | None = None, ratio: float | None = None) -> Asset:
-    return asset.optimize(OptimizeOptions(target_triangles=target_triangles, ratio=ratio))
+def stage(
+    asset: Asset,
+    *,
+    materials: Literal["cad", "display", "none"] = "cad",
+    normals: bool = True,
+    uv0: UVMode = "box",
+    uv1: UVMode | None = None,
+) -> Asset:
+    return asset.stage(StageOptions(materials=materials, normals=normals, uv0=uv0, uv1=uv1))
+
+
+def optimize(
+    asset: Asset,
+    *,
+    target_triangles: int | None = None,
+    ratio: float | None = None,
+    preserve_instances: bool = True,
+    simplify: bool = True,
+    optimize_buffers: bool = True,
+) -> Asset:
+    return asset.optimize(
+        OptimizeOptions(
+            target_triangles=target_triangles,
+            ratio=ratio,
+            preserve_instances=preserve_instances,
+            simplify=simplify,
+            optimize_buffers=optimize_buffers,
+        )
+    )
+
+
+def lods(asset: Asset, *, ratios: list[float] | tuple[float, ...] = (0.5, 0.25, 0.1)) -> Asset:
+    return asset.lods(LODOptions(tuple(ratios)))

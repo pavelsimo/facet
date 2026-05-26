@@ -38,6 +38,3 @@ htmlcov/
 
 # Docs output
 dist/docs-site/
-
-# Skip files
-PLAN.md

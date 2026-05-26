@@ -55,6 +55,29 @@ def test_mesh_computes_normals_without_nan() -> None:
     assert np.isfinite(with_normals.normals).all()
 
 
+def test_mesh_uses_angle_weighted_normals_by_default() -> None:
+    mesh = Mesh(
+        points=np.array(
+            [
+                [0, 0, 0],
+                [4, 0, 0],
+                [0, 1, 0],
+                [0, 0, 2],
+            ],
+            dtype=float,
+        ),
+        faces=np.array([[0, 1, 2], [0, 3, 1]], dtype=int),
+    )
+
+    angle_weighted = mesh.compute_normals()
+    area_weighted = mesh.compute_normals(angle_weighted=False)
+
+    assert angle_weighted.normals is not None
+    assert area_weighted.normals is not None
+    assert not np.allclose(angle_weighted.normals[0], area_weighted.normals[0])
+    assert np.linalg.norm(angle_weighted.normals[0]) == pytest.approx(1.0)
+
+
 def test_mesh_validation_rejects_out_of_range_indices() -> None:
     mesh = Mesh(
         points=np.array([[0, 0, 0], [1, 0, 0]], dtype=float),

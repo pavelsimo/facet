@@ -7,7 +7,7 @@ from fascat.io.usd import validate_usd, write_usd
 from fascat.material import Material
 from fascat.mesh import Mesh, MeshValidationError
 from fascat.options import LODOptions, OptimizeOptions, RepairOptions, StageOptions, Tessellation
-from fascat.pipeline import convert, optimize, repair, tessellate
+from fascat.pipeline import convert, lods, optimize, repair, stage, tessellate
 
 __version__ = "0.1.0"
 
@@ -25,10 +25,12 @@ __all__ = [
     "Tessellation",
     "__version__",
     "convert",
+    "lods",
     "optimize",
     "profiles",
     "read_step",
     "repair",
+    "stage",
     "tessellate",
     "validate_usd",
     "write_usd",

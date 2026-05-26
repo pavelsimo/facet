@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -20,6 +21,20 @@ def test_step_fixtures_import_with_names_units_and_parts(fixture: Path) -> None:
     assert asset.meters_per_unit > 0.0
     assert asset.root.children
     assert asset.report.steps[0].name == "import"
+
+
+def test_step_ids_include_source_identity(tmp_path: Path) -> None:
+    fixture = Path("tests/fixtures/spool-clamp-lid.step")
+    copied = tmp_path / "spool-copy.step"
+    shutil.copyfile(fixture, copied)
+
+    original_a = fc.read_step(fixture)
+    original_b = fc.read_step(fixture)
+    copied_asset = fc.read_step(copied)
+
+    assert set(original_a.parts) == set(original_b.parts)
+    assert set(original_a.parts) != set(copied_asset.parts)
+    assert all("source_identity" in part.metadata for part in original_a.parts.values())
 
 
 def test_step_fixture_converts_to_valid_usd_with_report(tmp_path: Path) -> None:

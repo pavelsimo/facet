@@ -15,6 +15,7 @@ def build_lods(asset: Asset, options: LODOptions) -> Asset:
             lod = part.mesh.simplify(ratio=ratio)
             if lod.triangle_count > previous_count:
                 lod = lod.simplify(target_triangles=previous_count)
+            lod.validate()
             previous_count = lod.triangle_count
             part.lod_meshes.append(lod)
     return result

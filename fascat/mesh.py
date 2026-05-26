@@ -18,6 +18,18 @@ class MeshValidationError(ValueError):
     """Raised when mesh arrays are not usable by the pipeline."""
 
 
+def _vector_angles(left: FloatArray, right: FloatArray) -> FloatArray:
+    left_lengths = np.linalg.norm(left, axis=1)
+    right_lengths = np.linalg.norm(right, axis=1)
+    denom = left_lengths * right_lengths
+    angles = np.zeros(left.shape[0], dtype=np.float64)
+    valid = denom > 0.0
+    if np.any(valid):
+        cosines = np.einsum("ij,ij->i", left[valid], right[valid]) / denom[valid]
+        angles[valid] = np.arccos(np.clip(cosines, -1.0, 1.0))
+    return angles
+
+
 @dataclass
 class Mesh:
     points: FloatArray
@@ -171,15 +183,28 @@ class Mesh:
         keep = np.flatnonzero(areas > area_epsilon)
         return self._filter_faces(keep).remove_unreferenced_vertices()
 
-    def compute_normals(self) -> Mesh:
+    def compute_normals(self, *, angle_weighted: bool = True) -> Mesh:
         normals = np.zeros_like(self.points, dtype=np.float64)
         if self.triangle_count > 0 and self.vertex_count > 0:
             p0 = self.points[self.faces[:, 0]]
             p1 = self.points[self.faces[:, 1]]
             p2 = self.points[self.faces[:, 2]]
             face_normals = np.cross(p1 - p0, p2 - p0)
-            for corner in range(3):
-                np.add.at(normals, self.faces[:, corner], face_normals)
+            if angle_weighted:
+                face_lengths = np.linalg.norm(face_normals, axis=1)
+                valid = face_lengths > 0.0
+                unit_normals = np.zeros_like(face_normals)
+                unit_normals[valid] = face_normals[valid] / face_lengths[valid, None]
+                for corner in range(3):
+                    origin = self.points[self.faces[:, corner]]
+                    left = self.points[self.faces[:, (corner + 1) % 3]] - origin
+                    right = self.points[self.faces[:, (corner + 2) % 3]] - origin
+                    angles = _vector_angles(left, right)
+                    weighted = unit_normals * angles[:, None]
+                    np.add.at(normals, self.faces[:, corner], weighted)
+            else:
+                for corner in range(3):
+                    np.add.at(normals, self.faces[:, corner], face_normals)
         lengths = np.linalg.norm(normals, axis=1)
         nonzero = lengths > 0.0
         normals[nonzero] = normals[nonzero] / lengths[nonzero, None]
@@ -317,7 +342,9 @@ class Mesh:
             mesh = self.copy()
             mesh.faces = simplified_indices[: face_count * 3].reshape((-1, 3))
             mesh.material_indices = self._assign_materials_by_nearest_centroid(mesh.points, mesh.faces)
-            return mesh.remove_unreferenced_vertices().compute_normals()
+            mesh = mesh.remove_unreferenced_vertices().compute_normals()
+            mesh.validate()
+            return mesh
         except Exception:
             try:
                 from fast_simplification import simplify
@@ -335,11 +362,15 @@ class Mesh:
                 if self.uvs:
                     for channel in self.uvs:
                         mesh = mesh.box_uv(channel)
-                return mesh.repair(RepairOptions())
+                mesh = mesh.repair(RepairOptions())
+                mesh.validate()
+                return mesh
             except Exception:
                 stride = max(1, int(np.ceil(self.triangle_count / target_triangles)))
                 keep = np.arange(0, self.triangle_count, stride, dtype=np.int64)[:target_triangles]
-                return self._filter_faces(keep).remove_unreferenced_vertices().compute_normals()
+                mesh = self._filter_faces(keep).remove_unreferenced_vertices().compute_normals()
+                mesh.validate()
+                return mesh
 
     def optimize_buffers(self) -> Mesh:
         if self.triangle_count == 0:

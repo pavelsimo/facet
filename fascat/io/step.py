@@ -14,6 +14,10 @@ from fascat.report import Report, timed_step
 
 def read_step(path: str | Path) -> Asset:
     source = Path(path)
+    return _read_step_path(source, source_identity=str(source.resolve()))
+
+
+def _read_step_path(source: Path, *, source_identity: str) -> Asset:
     if not source.exists():
         raise FileNotFoundError(f"missing STEP file: {source}")
     if source.suffix.lower() not in {".step", ".stp"}:
@@ -22,11 +26,15 @@ def read_step(path: str | Path) -> Asset:
     with timed_step() as timer:
         document, shape_tool, unit_name, meters_per_unit = _read_xde_document(source)
         free_labels = _free_shape_labels(shape_tool)
-        root = Node(id="root", name=source.stem, metadata={"source": str(source)})
+        root = Node(
+            id=_stable_id("node", f"{source_identity}:root"),
+            name=source.stem,
+            metadata={"source": str(source), "source_identity": source_identity},
+        )
         parts: dict[str, Part] = {}
         materials: dict[str, Material] = {}
         for index, label in enumerate(free_labels, start=1):
-            root.children.append(_build_node(label, f"root/{index}", parts, materials))
+            root.children.append(_build_node(label, f"root/{index}", source_identity, parts, materials))
 
     report = Report(source_path=str(source))
     asset = Asset(
@@ -55,7 +63,7 @@ def read_step_bytes(data: bytes, *, name: str = "stdin.step") -> Asset:
     with tempfile.NamedTemporaryFile(suffix=Path(name).suffix or ".step") as handle:
         handle.write(data)
         handle.flush()
-        asset = read_step(handle.name)
+        asset = _read_step_path(Path(handle.name), source_identity=name)
     asset.source_path = None
     asset.report.source_path = None
     asset.root.metadata["source"] = name
@@ -102,13 +110,19 @@ def _free_shape_labels(shape_tool: Any) -> list[Any]:
     return [labels.Value(index) for index in range(labels.Lower(), labels.Upper() + 1)]
 
 
-def _build_node(label: Any, occurrence_path: str, parts: dict[str, Part], materials: dict[str, Material]) -> Node:
+def _build_node(
+    label: Any,
+    occurrence_path: str,
+    source_identity: str,
+    parts: dict[str, Part],
+    materials: dict[str, Material],
+) -> Node:
     from OCP.TDF import TDF_LabelSequence
     from OCP.XCAFDoc import XCAFDoc_ShapeTool
 
     label_entry = _label_entry(label)
     node = Node(
-        id=_stable_id("node", occurrence_path),
+        id=_stable_id("node", f"{source_identity}:{occurrence_path}"),
         name=_label_name(label) or f"Node {label_entry}",
         transform=_label_transform(label),
         metadata={"step_label": label_entry},
@@ -119,7 +133,7 @@ def _build_node(label: Any, occurrence_path: str, parts: dict[str, Part], materi
         XCAFDoc_ShapeTool.GetComponents_s(label, children, False)
         for index in range(children.Lower(), children.Upper() + 1):
             child = children.Value(index)
-            node.children.append(_build_node(child, f"{occurrence_path}/{index}", parts, materials))
+            node.children.append(_build_node(child, f"{occurrence_path}/{index}", source_identity, parts, materials))
         return node
 
     shape_label = _shape_definition_label(label)
@@ -128,7 +142,7 @@ def _build_node(label: Any, occurrence_path: str, parts: dict[str, Part], materi
         return node
 
     part_entry = _label_entry(shape_label)
-    part_id = _stable_id("part", part_entry)
+    part_id = _stable_id("part", f"{source_identity}:{part_entry}")
     node.part_id = part_id
     if part_id not in parts:
         color = _label_color(label) or _label_color(shape_label) or (0.75, 0.75, 0.75, 1.0)
@@ -143,6 +157,7 @@ def _build_node(label: Any, occurrence_path: str, parts: dict[str, Part], materi
             metadata={
                 "step_label": part_entry,
                 "occurrence_label": label_entry,
+                "source_identity": source_identity,
                 "source_name": _label_name(shape_label) or "",
             },
             fingerprint=part_entry,
