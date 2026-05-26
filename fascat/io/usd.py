@@ -237,7 +237,7 @@ def _bind_materials(
     first_material_path = material_paths.get(part.material_ids[0])
     if first_material_path:
         first_material = UsdShade.Material.Get(stage, first_material_path)
-        UsdShade.MaterialBindingAPI(usd_mesh).Bind(first_material)
+        UsdShade.MaterialBindingAPI.Apply(usd_mesh.GetPrim()).Bind(first_material)
 
     if mesh.material_indices is None or len(set(mesh.material_indices.astype(int).tolist())) <= 1:
         return
@@ -259,7 +259,7 @@ def _bind_materials(
         material_name = materials[material_id].name if material_id in materials else material_id
         subset.GetPrim().SetCustomDataByKey("fascat:originalName", material_name)
         material = UsdShade.Material.Get(stage, material_path)
-        UsdShade.MaterialBindingAPI(subset.GetPrim()).Bind(material)
+        UsdShade.MaterialBindingAPI.Apply(subset.GetPrim()).Bind(material)
 
 
 def _part_occurrence_counts(root: Node) -> dict[str, int]:

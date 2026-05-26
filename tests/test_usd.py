@@ -79,6 +79,7 @@ def test_usd_export_authors_mesh_material_units_and_lods(tmp_path: Path) -> None
     mesh_prim = next(prim for prim in Usd.PrimRange(stage.GetDefaultPrim()) if prim.IsA(UsdGeom.Mesh))
     assert UsdGeom.Mesh(mesh_prim).GetSubdivisionSchemeAttr().Get() == "none"
     assert UsdGeom.Mesh(mesh_prim).GetDisplayColorAttr().Get()[0] == (1.0, 0.0, 0.0)
+    assert "MaterialBindingAPI" in mesh_prim.GetAppliedSchemas()
     extent = UsdGeom.Mesh(mesh_prim).GetExtentAttr().Get()
     assert len(extent) == 2
     assert tuple(extent[0]) == (-1.0, -1.0, -1.0)
@@ -303,6 +304,7 @@ def test_usd_export_authors_face_material_subsets(tmp_path: Path) -> None:
 
     assert len(subsets) == 2
     assert subset_indices == [0, 1]
+    assert all("MaterialBindingAPI" in prim.GetAppliedSchemas() for prim in subsets)
     assert sorted(subset_bindings) == ["/Materials/_2_blue_paint", "/Materials/red_metal"]
     assert subset_metadata == {
         "red metal!": "red material source!",
