@@ -122,6 +122,13 @@ class Asset:
     def occurrence_count(self) -> int:
         return sum(1 for node in self.root.walk() if node.part_id is not None)
 
+    def _stats_with_lods(self) -> dict[str, int]:
+        stats = self.stats()
+        lod_meshes = [lod for part in self.parts.values() for lod in part.lod_meshes]
+        stats["lod_meshes"] = len(lod_meshes)
+        stats["lod_triangles"] = sum(mesh.triangle_count for mesh in lod_meshes)
+        return stats
+
     def copy(self, *, keep_source: bool = True) -> Asset:
         return Asset(
             root=self.root.copy(),
@@ -226,7 +233,7 @@ class Asset:
         from fascat.ops.lod import build_lods
 
         opts = options or LODOptions()
-        before = self.stats()
+        before = self._stats_with_lods()
         warning_count = len(self.report.warnings)
         with timed_step() as timer:
             asset = build_lods(self, opts)
@@ -235,7 +242,7 @@ class Asset:
             "lods",
             options=opts.to_dict(),
             before=before,
-            after=asset.stats(),
+            after=asset._stats_with_lods(),
             duration=timer.duration,
             warnings=step_warnings,
         )

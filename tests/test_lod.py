@@ -47,5 +47,10 @@ def test_lods_are_monotonic() -> None:
     with_lods = asset.lods(LODOptions((0.75, 0.5, 0.25)))
     part = with_lods.parts["cube"]
     counts = [mesh.triangle_count, *[lod.triangle_count for lod in part.lod_meshes]]
+    step = with_lods.report.steps[-1]
 
     assert counts == sorted(counts, reverse=True)
+    assert step.before["lod_meshes"] == 0
+    assert step.before["lod_triangles"] == 0
+    assert step.after["lod_meshes"] == 3
+    assert step.after["lod_triangles"] == sum(counts[1:])
