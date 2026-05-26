@@ -4,20 +4,49 @@ import pytest
 
 import fascat as fc
 from fascat import profiles
+from fascat.options import ConversionProfile
 
 
-def test_profiles_produce_deterministic_option_sets() -> None:
-    desktop = profiles.realtime_desktop()
-    web = profiles.realtime_web()
+@pytest.mark.parametrize(
+    ("profile", "name", "sag", "angle", "target_triangles", "uv0", "lods"),
+    [
+        (profiles.inspect_only(), "inspect-only", None, None, None, "none", None),
+        (profiles.realtime_desktop(), "realtime-desktop", 0.1, 15.0, 1_000_000, "box", (0.5, 0.25, 0.1)),
+        (profiles.realtime_web(), "realtime-web", 0.2, 20.0, 250_000, "box", (0.5, 0.25)),
+    ],
+)
+def test_profiles_match_documented_default_table(
+    profile: ConversionProfile,
+    name: str,
+    sag: float | None,
+    angle: float | None,
+    target_triangles: int | None,
+    uv0: str,
+    lods: tuple[float, ...] | None,
+) -> None:
+    assert profile.to_dict()["name"] == name
+    assert profiles.by_name(name).to_dict() == profile.to_dict()
+    assert profile.stage.uv0 == uv0
+    assert profile.stage.uv1 is None
 
-    assert desktop.to_dict()["name"] == "realtime-desktop"
-    assert web.to_dict()["name"] == "realtime-web"
-    assert desktop.tessellation is not None
-    assert desktop.tessellation.sag == 0.1
-    assert desktop.optimize is not None
-    assert desktop.optimize.target_triangles == 1_000_000
-    assert desktop.lods is not None
-    assert desktop.lods.ratios == (0.5, 0.25, 0.1)
+    if sag is None:
+        assert profile.tessellation is None
+    else:
+        assert profile.tessellation is not None
+        assert profile.tessellation.sag == sag
+        assert profile.tessellation.angle == angle
+
+    if target_triangles is None:
+        assert profile.optimize is None
+    else:
+        assert profile.optimize is not None
+        assert profile.optimize.target_triangles == target_triangles
+
+    if lods is None:
+        assert profile.lods is None
+    else:
+        assert profile.lods is not None
+        assert profile.lods.ratios == lods
 
 
 def test_lod_options_normalize_list_ratios() -> None:
