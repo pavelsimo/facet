@@ -7,6 +7,15 @@ from fascat.mesh import Mesh, MeshValidationError
 from fascat.options import RepairOptions
 
 
+def valid_triangle(**overrides: object) -> Mesh:
+    values = {
+        "points": np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=float),
+        "faces": np.array([[0, 1, 2]], dtype=int),
+    }
+    values.update(overrides)
+    return Mesh(**values)
+
+
 def test_mesh_removes_unreferenced_vertices() -> None:
     mesh = Mesh(
         points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [5, 5, 5]], dtype=float),
@@ -85,6 +94,44 @@ def test_mesh_validation_rejects_out_of_range_indices() -> None:
     )
 
     with pytest.raises(MeshValidationError, match="out-of-range"):
+        mesh.validate()
+
+
+@pytest.mark.parametrize(
+    ("mesh", "message"),
+    [
+        (valid_triangle(points=np.array([0, 0, 0], dtype=float)), "points must have shape"),
+        (valid_triangle(faces=np.array([0, 1, 2], dtype=int)), "faces must have shape"),
+        (valid_triangle(points=np.array([[0, 0, 0], [np.nan, 0, 0], [0, 1, 0]], dtype=float)), "NaN or Inf"),
+        (valid_triangle(faces=np.array([[-1, 1, 2]], dtype=int)), "negative vertex indices"),
+        (valid_triangle(faces=np.array([[0, 1, 9]], dtype=int)), "out-of-range vertex indices"),
+    ],
+)
+def test_mesh_validation_rejects_invalid_core_arrays(mesh: Mesh, message: str) -> None:
+    with pytest.raises(MeshValidationError, match=message):
+        mesh.validate()
+
+
+@pytest.mark.parametrize(
+    ("mesh", "message"),
+    [
+        (valid_triangle(normals=np.array([[0, 0, 1]], dtype=float)), "normals must match points shape"),
+        (
+            valid_triangle(normals=np.array([[0, 0, 1], [0, np.inf, 1], [0, 0, 1]], dtype=float)),
+            "normals must not contain NaN or Inf values",
+        ),
+        (valid_triangle(uvs={0: np.array([0, 0], dtype=float)}), "uv channel 0 must have shape"),
+        (valid_triangle(uvs={0: np.array([[0, 0], [1, 0]], dtype=float)}), "uv channel 0 must match"),
+        (
+            valid_triangle(uvs={0: np.array([[0, 0], [np.nan, 0], [0, 1]], dtype=float)}),
+            "uv channel 0 must not contain NaN or Inf values",
+        ),
+        (valid_triangle(material_indices=np.array([0, 1], dtype=int)), "material_indices must match"),
+        (valid_triangle(material_indices=np.array([-1], dtype=int)), "material_indices must not contain negative"),
+    ],
+)
+def test_mesh_validation_rejects_invalid_attribute_arrays(mesh: Mesh, message: str) -> None:
+    with pytest.raises(MeshValidationError, match=message):
         mesh.validate()
 
 
