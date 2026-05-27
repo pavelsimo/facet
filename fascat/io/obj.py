@@ -23,6 +23,7 @@ def write_obj(asset: Asset, path: str | Path, *, options: ObjExportOptions | Non
     if opts.materials and opts.write_mtl and asset.materials:
         lines.append(f"mtllib {output_path.with_suffix('.mtl').name}")
     vertex_offset = 1
+    normal_offset = 1
     for occurrence in _occurrences(asset):
         part = asset.parts.get(occurrence.part_id)
         if part is None or part.mesh is None:
@@ -35,15 +36,19 @@ def write_obj(asset: Asset, path: str | Path, *, options: ObjExportOptions | Non
         points = _transform_points(mesh.points, occurrence.world_transform)
         for point in points:
             lines.append(f"v {point[0]:.9g} {point[1]:.9g} {point[2]:.9g}")
+        normals = _occurrence_normals(mesh, points, occurrence.world_transform)
+        for normal in normals.values:
+            lines.append(f"vn {normal[0]:.9g} {normal[1]:.9g} {normal[2]:.9g}")
+        lines.append(_smoothing_directive(mesh, normals.per_face))
         current_material: str | None = None
         for face_index, face in enumerate(mesh.faces.astype(int).tolist()):
             material_id = _face_material_id(part, mesh, face_index)
             if opts.materials and material_id is not None and material_id != current_material:
                 lines.append(f"usemtl {_obj_name(material_id)}")
                 current_material = material_id
-            a, b, c = (index + vertex_offset for index in face)
-            lines.append(f"f {a} {b} {c}")
+            lines.append(_face_line(face, face_index, vertex_offset, normal_offset, normals.per_face))
         vertex_offset += mesh.vertex_count
+        normal_offset += normals.values.shape[0]
 
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     if opts.materials and opts.write_mtl and asset.materials:
@@ -83,6 +88,66 @@ def _occurrences(asset: Asset) -> list[_Occurrence]:
 def _transform_points(points: np.ndarray, transform: np.ndarray) -> np.ndarray:
     homogeneous = np.column_stack([points, np.ones(points.shape[0], dtype=np.float64)])
     return np.asarray((transform @ homogeneous.T).T[:, :3], dtype=np.float64)
+
+
+class _ObjNormals:
+    def __init__(self, values: np.ndarray, *, per_face: bool) -> None:
+        self.values = values
+        self.per_face = per_face
+
+
+def _occurrence_normals(mesh: Mesh, points: np.ndarray, transform: np.ndarray) -> _ObjNormals:
+    if mesh.normals is not None:
+        return _ObjNormals(_transform_normals(mesh.normals, transform), per_face=False)
+    return _ObjNormals(_face_normals(points, mesh.faces), per_face=True)
+
+
+def _transform_normals(normals: np.ndarray, transform: np.ndarray) -> np.ndarray:
+    linear = np.asarray(transform[:3, :3], dtype=np.float64)
+    try:
+        normal_matrix = np.linalg.inv(linear).T
+    except np.linalg.LinAlgError:
+        normal_matrix = linear
+    return _normalize_rows(normals @ normal_matrix.T)
+
+
+def _face_normals(points: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    if faces.size == 0:
+        return np.empty((0, 3), dtype=np.float64)
+    triangles = points[faces]
+    normals = np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0])
+    return _normalize_rows(normals)
+
+
+def _normalize_rows(values: np.ndarray) -> np.ndarray:
+    lengths = np.linalg.norm(values, axis=1)
+    result = np.zeros_like(values, dtype=np.float64)
+    nonzero = lengths > 0.0
+    result[nonzero] = values[nonzero] / lengths[nonzero, None]
+    result[~nonzero] = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    return result
+
+
+def _smoothing_directive(mesh: Mesh, per_face_normals: bool) -> str:
+    normal_mode = str(mesh.metadata.get("normal_mode", "")).lower()
+    if per_face_normals or normal_mode in {"flat", "hard_edges"}:
+        return "s off"
+    return "s 1"
+
+
+def _face_line(
+    face: list[int],
+    face_index: int,
+    vertex_offset: int,
+    normal_offset: int,
+    per_face_normals: bool,
+) -> str:
+    if per_face_normals:
+        normal_index = normal_offset + face_index
+        refs = [f"{vertex + vertex_offset}//{normal_index}" for vertex in face]
+    else:
+        refs = [f"{vertex + vertex_offset}//{vertex + normal_offset}" for vertex in face]
+    return "f " + " ".join(refs)
 
 
 def _face_material_id(part: Part, mesh: Mesh, face_index: int) -> str | None:

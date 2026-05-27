@@ -708,6 +708,8 @@ asset.write_stl("motor.stl", options=fc.StlExportOptions(binary=True, merge=True
 
 `quantize=True` writes `KHR_mesh_quantization` accessors and composes the dequantization transform into referencing nodes. `meshopt=True` writes `EXT_meshopt_compression` bufferView payloads while keeping fallback buffer data for validators and loaders that ignore the extension. USDZ output is built by writing a temporary USD stage and packaging it as `.usdz`. Texture compression flags are recorded in glTF extras for downstream packaging. Draco compression is not implemented yet, and `draco=True` raises instead of silently writing an uncompressed file. Write report steps include output file size and file-size budget warnings when a budget is provided.
 
+OBJ export writes vertex positions, normals, `f v//vn` face references, material assignments, and smoothing directives. Staged smooth normals export with smoothing enabled; flat, hard-edge, or generated face normals export with smoothing disabled.
+
 Export option parameters:
 
 | Option | Parameter | Meaning |

@@ -79,10 +79,50 @@ def test_obj_export_writes_mesh_and_mtl_sidecar(tmp_path) -> None:  # type: igno
     output = tmp_path / "triangle.obj"
 
     _asset().write_obj(output, options=ObjExportOptions(materials=True, write_mtl=True, preserve_groups=True))
+    text = output.read_text(encoding="utf-8")
 
     assert validate_obj(output) == {"meshes": 1, "points": 3, "triangles": 1}
-    assert "usemtl mat" in output.read_text(encoding="utf-8")
+    assert "usemtl mat" in text
+    assert "vn 0 0 1" in text
+    assert "s off" in text
+    assert "f 1//1 2//1 3//1" in text
     assert (tmp_path / "triangle.mtl").exists()
+
+
+def test_obj_export_writes_staged_vertex_normals_and_smoothing_groups(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    smooth_mesh = Mesh(
+        points=np.asarray([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=float),
+        faces=np.asarray([[0, 1, 2]], dtype=int),
+    ).compute_normals()
+    hard_mesh = Mesh(
+        points=np.asarray([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float),
+        faces=np.asarray([[0, 1, 2], [0, 3, 1]], dtype=int),
+    ).compute_hard_edge_normals(hard_edge_angle=30.0)
+    asset = Asset(
+        root=Node(
+            id="root",
+            name="root",
+            children=[
+                Node(id="smooth", name="Smooth", part_id="smooth"),
+                Node(id="hard", name="Hard", part_id="hard"),
+            ],
+        ),
+        parts={
+            "smooth": Part(id="smooth", name="Smooth", mesh=smooth_mesh),
+            "hard": Part(id="hard", name="Hard", mesh=hard_mesh),
+        },
+    )
+    output = tmp_path / "normals.obj"
+
+    asset.write_obj(output, options=ObjExportOptions(materials=False, write_mtl=False))
+
+    lines = output.read_text(encoding="utf-8").splitlines()
+    smooth_group = lines.index("g Smooth")
+    hard_group = lines.index("g Hard")
+    assert "s 1" in lines[smooth_group:hard_group]
+    assert "s off" in lines[hard_group:]
+    assert sum(1 for line in lines if line.startswith("vn ")) == smooth_mesh.vertex_count + hard_mesh.vertex_count
+    assert all("//" in line for line in lines if line.startswith("f "))
 
 
 def test_mesh_only_exports_report_file_size_budget_warnings(tmp_path) -> None:  # type: ignore[no-untyped-def]
