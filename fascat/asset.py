@@ -1185,21 +1185,22 @@ def _merge_vertices_report_stats(asset: Asset) -> dict[str, int]:
 
 def _delete_degenerate_polygons_report_stats(asset: Asset) -> dict[str, int]:
     stats = asset.stats()
-    before = 0
-    after = 0
-    removed = 0
-    removed_vertices = 0
+    delete_metadata_keys = (
+        "delete_degenerate_polygons_before",
+        "delete_degenerate_polygons_after",
+        "delete_degenerate_polygons_removed",
+        "delete_degenerate_polygons_vertices_removed",
+        "delete_degenerate_polygons_removed_duplicate_vertices",
+        "delete_degenerate_polygons_removed_collapsed_edges",
+        "delete_degenerate_polygons_removed_near_flat_area",
+    )
+    delete_metadata_totals = dict.fromkeys(delete_metadata_keys, 0)
     for part in asset.parts.values():
         if part.mesh is None:
             continue
-        before += _metadata_int(part.mesh.metadata.get("delete_degenerate_polygons_before"), 0)
-        after += _metadata_int(part.mesh.metadata.get("delete_degenerate_polygons_after"), 0)
-        removed += _metadata_int(part.mesh.metadata.get("delete_degenerate_polygons_removed"), 0)
-        removed_vertices += _metadata_int(part.mesh.metadata.get("delete_degenerate_polygons_vertices_removed"), 0)
-    stats["delete_degenerate_polygons_before"] = before
-    stats["delete_degenerate_polygons_after"] = after
-    stats["delete_degenerate_polygons_removed"] = removed
-    stats["delete_degenerate_polygons_vertices_removed"] = removed_vertices
+        for key in delete_metadata_keys:
+            delete_metadata_totals[key] += _metadata_int(part.mesh.metadata.get(key), 0)
+    stats.update(delete_metadata_totals)
     return stats
 
 

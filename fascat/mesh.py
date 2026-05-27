@@ -483,6 +483,7 @@ class Mesh:
         before_vertex_count = self.vertex_count
         before_triangle_count = self.triangle_count
         before_degenerate_count = int(self.quality_metrics(area_epsilon=opts.area_epsilon)["degenerate_triangles"])
+        reason_counts = self._degenerate_polygon_reason_counts(opts.area_epsilon)
         mesh = self.remove_degenerate_faces(opts.area_epsilon)
         after_degenerate_count = int(mesh.quality_metrics(area_epsilon=opts.area_epsilon)["degenerate_triangles"])
         mesh.metadata = {
@@ -496,9 +497,40 @@ class Mesh:
             "delete_degenerate_polygons_removed": str(before_triangle_count - mesh.triangle_count),
             "delete_degenerate_polygons_before": str(before_degenerate_count),
             "delete_degenerate_polygons_after": str(after_degenerate_count),
+            **{key: str(value) for key, value in reason_counts.items()},
         }
         mesh.validate()
         return mesh
+
+    def _degenerate_polygon_reason_counts(self, area_epsilon: float) -> dict[str, int]:
+        counts = {
+            "delete_degenerate_polygons_removed_duplicate_vertices": 0,
+            "delete_degenerate_polygons_removed_collapsed_edges": 0,
+            "delete_degenerate_polygons_removed_near_flat_area": 0,
+        }
+        if self.triangle_count == 0:
+            return counts
+        p0 = self.points[self.faces[:, 0]]
+        p1 = self.points[self.faces[:, 1]]
+        p2 = self.points[self.faces[:, 2]]
+        areas = np.linalg.norm(np.cross(p1 - p0, p2 - p0), axis=1) * 0.5
+        edge_epsilon = math.sqrt(area_epsilon) if area_epsilon > 0.0 else 0.0
+        for face_index in np.flatnonzero(areas <= area_epsilon).astype(int).tolist():
+            face = self.faces[face_index].astype(int).tolist()
+            if len(set(face)) < 3:
+                counts["delete_degenerate_polygons_removed_duplicate_vertices"] += 1
+                continue
+            triangle = self.points[face]
+            edge_lengths = (
+                float(np.linalg.norm(triangle[1] - triangle[0])),
+                float(np.linalg.norm(triangle[2] - triangle[1])),
+                float(np.linalg.norm(triangle[0] - triangle[2])),
+            )
+            if any(length <= edge_epsilon for length in edge_lengths):
+                counts["delete_degenerate_polygons_removed_collapsed_edges"] += 1
+            else:
+                counts["delete_degenerate_polygons_removed_near_flat_area"] += 1
+        return counts
 
     def quality_metrics(
         self,

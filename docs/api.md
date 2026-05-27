@@ -445,7 +445,8 @@ Use `DeleteDegeneratePolygonsOptions` when you want Unity-style degenerate
 polygon cleanup as a standalone, reproducible step. `area_epsilon` controls the
 near-zero-area threshold. The operation always writes a report step, even when
 no polygons are removed, and per-part metadata records before/after degenerate
-counts, removed triangle counts, removed unreferenced vertices, and the
+counts, removed triangle counts, removed unreferenced vertices, primary removal
+reasons for duplicate vertices, collapsed edges, and near-flat area, and the
 unit-aware area threshold.
 
 ## Feature-Preserving Simplification

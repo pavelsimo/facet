@@ -338,8 +338,8 @@ def test_merge_vertices_asset_operation_reports_counts() -> None:
 
 def test_delete_degenerate_polygons_asset_operation_reports_counts() -> None:
     mesh = Mesh(
-        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [2, 0, 0]], dtype=float),
-        faces=np.array([[0, 1, 2], [0, 0, 1], [0, 1, 3]], dtype=int),
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [2, 0, 0], [0, 0, 0]], dtype=float),
+        faces=np.array([[0, 1, 2], [0, 0, 1], [0, 1, 3], [0, 4, 1]], dtype=int),
     )
     asset = Asset(
         root=Node(id="root", name="root", children=[Node(id="node", name="node", part_id="part")]),
@@ -352,13 +352,16 @@ def test_delete_degenerate_polygons_asset_operation_reports_counts() -> None:
 
     assert part.mesh is not None
     assert part.mesh.triangle_count == 1
-    assert part.mesh.metadata["delete_degenerate_polygons_removed"] == "2"
+    assert part.mesh.metadata["delete_degenerate_polygons_removed"] == "3"
     assert step.name == "delete_degenerate_polygons"
     assert step.options["area_epsilon"] == 1e-12
     assert step.after["triangles"] == 1
-    assert step.after["delete_degenerate_polygons_before"] == 2
+    assert step.after["delete_degenerate_polygons_before"] == 3
     assert step.after["delete_degenerate_polygons_after"] == 0
-    assert step.after["delete_degenerate_polygons_removed"] == 2
+    assert step.after["delete_degenerate_polygons_removed"] == 3
+    assert step.after["delete_degenerate_polygons_removed_duplicate_vertices"] == 1
+    assert step.after["delete_degenerate_polygons_removed_collapsed_edges"] == 1
+    assert step.after["delete_degenerate_polygons_removed_near_flat_area"] == 1
 
 
 def test_asset_operation_reports_include_options_and_before_after_counts() -> None:
