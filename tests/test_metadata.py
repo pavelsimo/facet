@@ -8,11 +8,12 @@ from typer.testing import CliRunner
 
 from fascat.asset import Asset, Node, Part
 from fascat.cli import app
+from fascat.filter import Filter
 from fascat.io.gltf import write_gltf
 from fascat.material import Material
 from fascat.mesh import Mesh
 from fascat.metadata import PmiAnnotation, Tolerance
-from fascat.options import GltfExportOptions, MetadataExportOptions
+from fascat.options import GltfExportOptions, MetadataExportOptions, ReplaceOptions
 
 runner = CliRunner()
 
@@ -80,6 +81,19 @@ def test_gltf_export_writes_metadata_and_pmi_extras(tmp_path: Path) -> None:
     assert mesh_extras["pmiIds"] == ["pmi_001"]
     assert node_extras["metadata"]["step_label"] == "0:1"
     assert document["materials"][0]["extras"]["fascat"]["metadata"]["finish"] == "matte"
+
+
+def test_gltf_export_resolves_pmi_links_through_source_part_metadata(tmp_path: Path) -> None:
+    asset = _asset_with_metadata().replace(ReplaceOptions(mode="bounding_box"), where=Filter.part("part"))
+    output = tmp_path / "metadata-replaced.gltf"
+
+    write_gltf(asset, output)
+
+    document = json.loads(output.read_text(encoding="utf-8"))
+    mesh_extras = document["meshes"][0]["extras"]["fascat"]
+
+    assert mesh_extras["metadata"]["source_part_ids"] == "part"
+    assert mesh_extras["pmiIds"] == ["pmi_001"]
 
 
 def test_gltf_export_can_suppress_metadata_and_pmi(tmp_path: Path) -> None:

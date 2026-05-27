@@ -13,6 +13,7 @@ from numpy.typing import NDArray
 from fascat.asset import Asset, Node, Part
 from fascat.material import Material
 from fascat.mesh import Mesh
+from fascat.metadata import pmi_ids_by_part
 from fascat.options import GltfExportOptions, MetadataExportOptions
 
 GLTF_SUFFIXES = {".gltf", ".glb"}
@@ -829,11 +830,7 @@ def _uses_msft_lod(nodes: list[dict[str, Any]]) -> bool:
 
 
 def _pmi_by_part(asset: Asset) -> dict[str, list[str]]:
-    result: dict[str, list[str]] = {}
-    for annotation in asset.pmi:
-        for target in annotation.applies_to:
-            result.setdefault(target, []).append(annotation.id)
-    return result
+    return pmi_ids_by_part(asset.parts, asset.pmi)
 
 
 def _add_metadata_extras(

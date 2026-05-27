@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -70,3 +71,44 @@ class PmiAnnotation:
         if self.plane is not None:
             payload["plane"] = [list(row) for row in self.plane]
         return payload
+
+
+def pmi_ids_by_part(parts: Mapping[str, object], annotations: Iterable[PmiAnnotation]) -> dict[str, list[str]]:
+    target_to_parts = _pmi_target_to_current_parts(parts)
+    result: dict[str, list[str]] = {}
+    for annotation in annotations:
+        for target in annotation.applies_to:
+            for part_id in target_to_parts.get(target, ()):
+                ids = result.setdefault(part_id, [])
+                if annotation.id not in ids:
+                    ids.append(annotation.id)
+    return result
+
+
+def _pmi_target_to_current_parts(parts: Mapping[str, object]) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for part_id, part in parts.items():
+        current_id = str(part_id)
+        _append_unique(result, current_id, current_id)
+        metadata = getattr(part, "metadata", {})
+        if isinstance(metadata, Mapping):
+            for key in ("source_part_id", "source_part_ids"):
+                for source_id in _metadata_id_list(metadata.get(key)):
+                    _append_unique(result, source_id, current_id)
+    return result
+
+
+def _metadata_id_list(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return tuple(item.strip() for item in value.replace("|", ",").split(",") if item.strip())
+    if isinstance(value, Iterable) and not isinstance(value, (bytes, bytearray)):
+        return tuple(str(item).strip() for item in value if str(item).strip())
+    return (str(value),)
+
+
+def _append_unique(values: dict[str, list[str]], key: str, item: str) -> None:
+    items = values.setdefault(key, [])
+    if item not in items:
+        items.append(item)

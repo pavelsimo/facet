@@ -187,10 +187,10 @@ These need more design and should not be mixed into documentation or diagnostics
    - Unsupported sliver-face removal still reports a visible warning instead of claiming geometry was changed.
    - Remaining polish: implement or delegate sliver-face removal, duplicate-face cleanup, and deeper face/wire repair before tessellation.
 
-6. PMI and metadata output
-   - Add STEP AP242 PMI import tests.
-   - Decide how PMI should appear in USD and glTF: metadata only, annotation geometry, or both.
-   - Preserve stable metadata paths through merge, replace, and export operations.
+6. PMI and metadata output - first stability pass complete
+   - STEP AP242 fixtures now test that advertised PMI is reported as present and unsupported when typed PMI import is unavailable.
+   - glTF and USD exporters keep PMI as metadata records for now and resolve links through `source_part_id` / `source_part_ids` after merge, explode, or replace operations.
+   - Remaining polish: implement typed AP242 PMI entity extraction and visual annotation geometry for `metadata_and_visuals`.
 
 7. Large assembly scaling
    - Reduce full-asset copying in operations that only touch selected parts.

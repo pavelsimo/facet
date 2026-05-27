@@ -91,6 +91,23 @@ def test_shape_fingerprint_falls_back_to_python_hash() -> None:
 
 
 @pytest.mark.requires_ocp
+def test_step_ap242_pmi_fixture_reports_unsupported_pmi_import() -> None:
+    fixture = Path("tests/fixtures/raspberry-pi-camera-3-mount.step")
+
+    asset = fc.read_step(fixture)
+    import_step = asset.report.steps[0]
+
+    assert import_step.options["pmi_present"] is True
+    assert str(import_step.options["pmi_schema"]).startswith("AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF")
+    assert import_step.options["pmi_count"] == 0
+    assert import_step.options["unsupported_pmi_count"] == 1
+    assert asset.metadata["pmi_present"] == "true"
+    assert asset.metadata["pmi_import_status"] == "unsupported"
+    assert import_step.warnings == asset.report.warnings
+    assert "AP242 PMI" in import_step.warnings[0]
+
+
+@pytest.mark.requires_ocp
 def test_step_shape_fingerprints_are_stable_across_imports() -> None:
     fixture = Path("tests/fixtures/spool-clamp-lid.step")
 

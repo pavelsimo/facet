@@ -249,7 +249,9 @@ asset.pmi.append(
 )
 ```
 
-glTF export writes metadata and PMI into `extras.fascat`. USD export writes Fascat metadata into `customData` on the scene, nodes, prototypes, materials, meshes, and `/PMI/*` annotation prims.
+glTF export writes metadata and PMI into `extras.fascat`. USD export writes Fascat metadata into `customData` on the scene, nodes, prototypes, materials, meshes, and `/PMI/*` annotation prims. When merge, explode, or replace operations create new parts, exporters resolve PMI links through `source_part_id` and `source_part_ids` metadata so annotations that targeted the original part still attach to the derived output.
+
+STEP AP242 files can advertise PMI even when the current OCP-backed importer cannot extract typed annotation entities. In that case the import report records `pmi_present=true`, `unsupported_pmi_count=1`, and a warning instead of silently implying that PMI was imported.
 
 Metadata and PMI parameters:
 
@@ -260,7 +262,7 @@ Metadata and PMI parameters:
 | `StepReadOptions` | `properties` | Import user and product properties. |
 | `StepReadOptions` | `layers` | Import layer assignments as metadata. |
 | `StepReadOptions` | `validation_properties` | Import STEP validation properties such as source counts or checksums when available. |
-| `StepReadOptions` | `pmi` | Import typed PMI records when the backend exposes them. |
+| `StepReadOptions` | `pmi` | Import typed PMI records when the backend exposes them; AP242 PMI markers are reported when typed import is unavailable. |
 | `PmiAnnotation` | `id` | Stable annotation id used for references from parts or mesh groups. |
 | `PmiAnnotation` | `kind` | Annotation type such as `dimension`, `datum`, `tolerance`, `note`, or backend-specific kinds. |
 | `PmiAnnotation` | `text` | Human-readable annotation text. |
@@ -268,7 +270,7 @@ Metadata and PMI parameters:
 | `PmiAnnotation` | `tolerance` | `Tolerance(upper=..., lower=...)` values for dimensional or GD&T annotations. |
 | `PmiAnnotation` | `applies_to` | Target ids such as part ids, node ids, face groups, edge groups, or material ids. |
 | `MetadataExportOptions` | `mode` | Export metadata as `full`, count-only `summary`, or `none`. |
-| `MetadataExportOptions` | `pmi` | Export PMI as `none`, `summary`, `metadata`, `metadata_and_visuals`, or `full`. |
+| `MetadataExportOptions` | `pmi` | Export PMI as `none`, `summary`, `metadata`, `metadata_and_visuals`, or `full`. `metadata_and_visuals` currently emits metadata records and stable links; annotation geometry is still a planned backend. |
 
 ```python
 asset.write_gltf(

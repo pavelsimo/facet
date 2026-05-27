@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,12 @@ from fascat.report import Report, timed_step
 _PartIndex = dict[tuple[str, str, str, str], str]
 
 
+@dataclass(frozen=True)
+class _StepHeaderInfo:
+    schema: str = ""
+    pmi_present: bool = False
+
+
 def read_step(path: str | Path, *, options: StepReadOptions | None = None) -> Asset:
     source = Path(path)
     return _read_step_path(source, source_identity=str(source.resolve()), options=options or StepReadOptions())
@@ -27,6 +35,7 @@ def _read_step_path(source: Path, *, source_identity: str, options: StepReadOpti
     if source.suffix.lower() not in {".step", ".stp"}:
         raise ValueError(f"unsupported STEP extension: {source.suffix or '<none>'}")
 
+    header_info = _step_header_info(source)
     with timed_step() as timer:
         document, shape_tool, color_tool, unit_name, meters_per_unit = _read_xde_document(source, options)
         free_labels = _free_shape_labels(shape_tool)
@@ -61,12 +70,16 @@ def _read_step_path(source: Path, *, source_identity: str, options: StepReadOpti
         meters_per_unit=meters_per_unit,
         up_axis="Z",
         source_path=source,
-        metadata=_asset_metadata(source, source_identity, unit_name, meters_per_unit, options),
+        metadata=_asset_metadata(source, source_identity, unit_name, meters_per_unit, options, header_info),
         pmi=[],
         report=report,
     )
     asset.report.input_stats = asset.stats()
     metadata_count = _metadata_count(asset)
+    unsupported_pmi_count = _unsupported_pmi_count(options, header_info, pmi_count=len(asset.pmi))
+    import_warnings = _import_warnings(options, header_info, unsupported_pmi_count)
+    for warning in import_warnings:
+        asset.report.add_warning(warning)
     asset.report.add_step(
         "import",
         options={
@@ -75,11 +88,14 @@ def _read_step_path(source: Path, *, source_identity: str, options: StepReadOpti
             "read_options": options.to_dict(),
             "metadata_count": metadata_count,
             "pmi_count": len(asset.pmi),
-            "unsupported_pmi_count": 0,
+            "unsupported_pmi_count": unsupported_pmi_count,
+            "pmi_schema": header_info.schema,
+            "pmi_present": header_info.pmi_present,
         },
         before={"nodes": 0, "parts": 0, "occurrences": 0, "materials": 0, "vertices": 0, "triangles": 0},
         after=asset.stats(),
         duration=timer.duration,
+        warnings=import_warnings,
     )
     _ = document
     return asset
@@ -146,16 +162,52 @@ def _asset_metadata(
     unit_name: str,
     meters_per_unit: float,
     options: StepReadOptions,
+    header_info: _StepHeaderInfo,
 ) -> Metadata:
     if not options.metadata:
         return {}
-    return {
+    metadata: Metadata = {
         "source": str(source),
         "source_identity": source_identity,
         "units": unit_name,
         "meters_per_unit": meters_per_unit,
         "metadata_options": options.to_dict(),
     }
+    if header_info.schema:
+        metadata["step_schema"] = header_info.schema
+    if header_info.pmi_present:
+        metadata["pmi_present"] = "true"
+        metadata["pmi_import_status"] = "unsupported" if options.pmi else "disabled"
+    return metadata
+
+
+def _step_header_info(source: Path) -> _StepHeaderInfo:
+    with source.open("r", encoding="utf-8", errors="ignore") as handle:
+        text = handle.read(131_072)
+    header = text.split("ENDSEC;", 1)[0]
+    schema_match = re.search(r"FILE_SCHEMA\s*\(\s*\(\s*'([^']+)'", header, flags=re.IGNORECASE | re.DOTALL)
+    schema = " ".join(schema_match.group(1).split()) if schema_match else ""
+    upper_header = header.upper()
+    pmi_present = "AP242" in schema.upper() and (
+        "PRODUCT MANUFACTURING INFORMATION" in upper_header or "PMI" in upper_header
+    )
+    return _StepHeaderInfo(schema=schema, pmi_present=pmi_present)
+
+
+def _unsupported_pmi_count(options: StepReadOptions, header_info: _StepHeaderInfo, *, pmi_count: int) -> int:
+    if not options.pmi or not header_info.pmi_present or pmi_count:
+        return 0
+    return 1
+
+
+def _import_warnings(
+    options: StepReadOptions,
+    header_info: _StepHeaderInfo,
+    unsupported_pmi_count: int,
+) -> list[str]:
+    if options.pmi and unsupported_pmi_count:
+        return ["STEP file advertises AP242 PMI, but PMI entity import is not implemented; annotations are omitted"]
+    return []
 
 
 def _metadata_count(asset: Asset) -> int:

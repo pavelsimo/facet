@@ -197,6 +197,28 @@ def test_usd_export_authors_metadata_and_pmi_custom_data(tmp_path: Path) -> None
     assert pmi.GetCustomDataByKey("fascat:appliesTo") == ["cube"]
 
 
+def test_usd_export_resolves_pmi_links_through_source_part_metadata(tmp_path: Path) -> None:
+    mesh = cube_mesh()
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="Cube", part_id="cube")]),
+        parts={"cube": Part(id="cube", name="Cube", mesh=mesh, metadata={"layer": "A"})},
+        materials={},
+        pmi=[fc.PmiAnnotation(id="pmi_001", kind="dimension", text="10", applies_to=["cube"])],
+    ).replace(fc.ReplaceOptions(mode="bounding_box"), where=fc.Filter.part("cube"))
+    output = tmp_path / "metadata-replaced.usda"
+
+    write_usd(asset, output)
+
+    stage = Usd.Stage.Open(str(output))
+    assert stage is not None
+    prototype = next(
+        prim for prim in Usd.PrimRange(stage.GetPrimAtPath("/__Prototypes")) if prim.GetName() != "__Prototypes"
+    )
+
+    assert prototype.GetCustomDataByKey("fascat:metadata")["source_part_ids"] == "cube"
+    assert prototype.GetCustomDataByKey("fascat:pmiIds") == ["pmi_001"]
+
+
 def test_usd_export_writes_binary_usdc(tmp_path: Path) -> None:
     mesh = cube_mesh()
     asset = Asset(

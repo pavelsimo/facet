@@ -9,6 +9,7 @@ import numpy as np
 
 from fascat.asset import Asset, Node, Part
 from fascat.material import Material
+from fascat.metadata import pmi_ids_by_part
 from fascat.options import MetadataExportOptions, UsdExportOptions
 
 
@@ -407,11 +408,7 @@ def _write_pmi(stage: Any, asset: Asset, metadata_options: MetadataExportOptions
 
 
 def _pmi_by_part(asset: Asset) -> dict[str, list[str]]:
-    result: dict[str, list[str]] = {}
-    for annotation in asset.pmi:
-        for target in annotation.applies_to:
-            result.setdefault(target, []).append(annotation.id)
-    return result
+    return pmi_ids_by_part(asset.parts, asset.pmi)
 
 
 def _custom_data(values: dict[str, object]) -> dict[str, object]:

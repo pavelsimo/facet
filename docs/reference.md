@@ -252,7 +252,7 @@ warnings to distinguish exact work from fallbacks.
 
 | Capability | Fascat status | Report or diagnostic | Next step |
 |------------|---------------|----------------------|-----------|
-| STEP import, hierarchy, names, transforms, colors, metadata | Implemented for STEP | `import` report stats and pipeline import options | Add design variants, richer PMI/product toggles, existing mesh preference, and multi-file import |
+| STEP import, hierarchy, names, transforms, colors, metadata | Implemented for STEP | `import` report stats and pipeline import options; AP242 PMI markers warn when typed PMI import is unavailable | Add design variants, typed PMI entity extraction, existing mesh preference, and multi-file import |
 | BREP healing | Partial | `heal_brep`; records open shells, free/unstitched edges, small edges, and sliver counts; sliver removal warns that the backend leaves shapes unchanged | Implement sliver-face removal, duplicate-face cleanup, and deeper face/wire repair |
 | Tessellation | Implemented | `tessellate` report options and quality metadata | Add separate sag-ratio option, existing tessellation reuse, CAD UV/tangent extraction, and free-edge diagnostics |
 | Mesh repair | Implemented for core cleanup | `repair` report step | Add T-junction sewing, non-manifold cracking, and configurable orientation strategies |
@@ -264,6 +264,7 @@ warnings to distinguish exact work from fallbacks.
 | LOD generation | Partial | `run_lod_generators` / `lods` report steps | Preserve occurrence-level LOD chains and add far-LOD merge plus validation |
 | Runtime compression | Partial | glTF quantization and meshopt are implemented; texture compression is metadata-only; Draco is rejected | Add real KTX2/Basis output and a Draco path only if a reliable encoder is integrated |
 | Export and budgets | Implemented for USD, USDZ, glTF/GLB, OBJ, STL | `write` report includes file size and optional budget warnings | Add geometry/texture/metadata size breakdowns and export cleanup for unused resources |
+| PMI metadata export | Partial | glTF `extras.fascat` and USD `customData` include PMI records and resolve links through `source_part_ids` after merge/replace | Add visual annotation geometry for `metadata_and_visuals` |
 
 ## Validate flags
 
