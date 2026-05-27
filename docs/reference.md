@@ -135,7 +135,7 @@ fascat inspect input.step --json
 | `--small-part-triangle-threshold` | `64` | Triangle threshold for `--preserve-small-parts` |
 | `--preserve-silhouette` | `false` | Protect faces on bounding-box silhouette extremes |
 | `--quantize` | `false` | Record glTF quantization intent in export metadata |
-| `--meshopt` | `false` | Record glTF meshopt compression intent in export metadata |
+| `--meshopt` | `false` | Write glTF `EXT_meshopt_compression` bufferView payloads with fallback data |
 | `--draco` | `false` | Record glTF Draco compression intent in export metadata |
 | `--texture-compression` | unset | Texture compression intent: `ktx2` or `basisu` |
 | `--package` | `default` | USD package mode: `default` or `usdz` |

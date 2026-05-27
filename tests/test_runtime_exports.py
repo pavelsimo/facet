@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from fascat.asset import Asset, Node, Part
 from fascat.cli import app
+from fascat.io.gltf import validate_gltf
 from fascat.io.obj import validate_obj
 from fascat.io.stl import validate_stl
 from fascat.material import Material
@@ -29,7 +30,7 @@ def _asset() -> Asset:
     )
 
 
-def test_gltf_export_options_record_compression_intent_and_file_budget(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_gltf_export_options_write_meshopt_extension_and_file_budget(tmp_path) -> None:  # type: ignore[no-untyped-def]
     asset = _asset()
     output = tmp_path / "triangle.gltf"
 
@@ -46,6 +47,15 @@ def test_gltf_export_options_record_compression_intent_and_file_budget(tmp_path)
         "meshopt": True,
         "textureCompression": "ktx2",
     }
+    assert "EXT_meshopt_compression" in document["extensionsUsed"]
+    compressed_views = [
+        view["extensions"]["EXT_meshopt_compression"]
+        for view in document["bufferViews"]
+        if "EXT_meshopt_compression" in view.get("extensions", {})
+    ]
+    assert compressed_views
+    assert {view["mode"] for view in compressed_views} >= {"ATTRIBUTES", "TRIANGLES"}
+    assert validate_gltf(output)["triangles"] == 1
     assert asset.report.steps[-1].after["file_size_bytes"] > 0
     assert asset.report.steps[-1].after["file_size_budget_bytes"] == 1
     assert "file size budget exceeded" in asset.report.warnings[-1]

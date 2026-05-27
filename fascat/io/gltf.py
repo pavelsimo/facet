@@ -47,8 +47,12 @@ def write_gltf(asset: Asset, path: str | Path, *, options: GltfExportOptions | N
         raise ValueError(f"unsupported glTF extension: {output_path.suffix or '<none>'}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    document, binary = _build_document(asset, binary_uri=suffix == ".gltf", metadata_options=opts.metadata)
+    document, binary = _build_document(asset, metadata_options=opts.metadata)
     _apply_export_options(document, opts)
+    if opts.meshopt:
+        binary = _apply_meshopt_compression(document, binary)
+    if suffix == ".gltf":
+        _embed_binary_uri(document, binary)
     if suffix == ".glb":
         output_path.write_bytes(_pack_glb(document, binary))
         return
@@ -127,7 +131,6 @@ class _ExportSpace:
 def _build_document(
     asset: Asset,
     *,
-    binary_uri: bool,
     metadata_options: MetadataExportOptions,
 ) -> tuple[dict[str, Any], bytes]:
     export_space = _export_space(asset)
@@ -173,8 +176,6 @@ def _build_document(
     root_node = _append_node(nodes, asset.root, part_meshes, part_lods, export_space, metadata_options)
     binary = bytes(builder.data)
     buffers: list[dict[str, object]] = [{"byteLength": len(binary)}]
-    if binary_uri:
-        buffers[0]["uri"] = "data:application/octet-stream;base64," + base64.b64encode(binary).decode("ascii")
 
     document: dict[str, Any] = {
         "asset": {"version": "2.0", "generator": "fascat"},
@@ -362,6 +363,131 @@ def _apply_export_options(document: dict[str, Any], options: GltfExportOptions) 
         compression["textureCompression"] = options.texture_compression
     if compression:
         fascat_extras["compression"] = compression
+
+
+def _apply_meshopt_compression(document: dict[str, Any], binary: bytes) -> bytes:
+    try:
+        import meshoptimizer
+    except ImportError as exc:
+        raise RuntimeError("glTF meshopt compression requires meshoptimizer") from exc
+
+    payload = bytearray(binary)
+    accessors_by_view = _accessors_by_buffer_view(document)
+    compressed_views = 0
+    for view_index, view_value in enumerate(_array(document.get("bufferViews"), "bufferViews")):
+        view = _object(view_value, f"bufferView {view_index}")
+        if int(view.get("buffer", 0)) != 0:
+            continue
+        accessor = accessors_by_view.get(view_index)
+        if accessor is None:
+            continue
+        byte_offset = _int(view.get("byteOffset", 0), f"bufferView {view_index} byteOffset")
+        byte_length = _int(view.get("byteLength"), f"bufferView {view_index} byteLength")
+        source = binary[byte_offset : byte_offset + byte_length]
+        spec = _meshopt_view_spec(view, accessor, source)
+        if spec is None:
+            continue
+        encoded = _meshopt_encode(source, spec, meshoptimizer)
+        if not encoded:
+            continue
+        compressed_offset = _append_aligned(payload, encoded)
+        view.setdefault("extensions", {})["EXT_meshopt_compression"] = {
+            "buffer": 0,
+            "byteOffset": compressed_offset,
+            "byteLength": len(encoded),
+            "byteStride": spec.byte_stride,
+            "count": spec.count,
+            "mode": spec.mode,
+        }
+        compressed_views += 1
+    if compressed_views:
+        _add_extension_used(document, "EXT_meshopt_compression")
+        buffers = _array(document.get("buffers"), "buffers")
+        _object(buffers[0], "buffer 0")["byteLength"] = len(payload)
+    return bytes(payload)
+
+
+@dataclass(frozen=True)
+class _MeshoptViewSpec:
+    mode: str
+    count: int
+    byte_stride: int
+    component_type: int
+
+
+def _accessors_by_buffer_view(document: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    result: dict[int, dict[str, Any]] = {}
+    for accessor_index, accessor_value in enumerate(_array(document.get("accessors"), "accessors")):
+        accessor = _object(accessor_value, f"accessor {accessor_index}")
+        view_index = accessor.get("bufferView")
+        if isinstance(view_index, int):
+            result[view_index] = accessor
+    return result
+
+
+def _meshopt_view_spec(
+    view: dict[str, Any],
+    accessor: dict[str, Any],
+    source: bytes,
+) -> _MeshoptViewSpec | None:
+    component_type = _int(accessor.get("componentType"), "meshopt accessor componentType")
+    accessor_type = accessor.get("type")
+    if not isinstance(accessor_type, str) or accessor_type not in _ACCESSOR_WIDTHS:
+        return None
+    component_size = _COMPONENT_SIZES.get(component_type)
+    if component_size is None:
+        return None
+    count = _int(accessor.get("count"), "meshopt accessor count")
+    byte_stride = _int(
+        view.get("byteStride", component_size * _ACCESSOR_WIDTHS[accessor_type]),
+        "meshopt bufferView byteStride",
+    )
+    if count <= 0 or byte_stride <= 0 or len(source) != count * byte_stride:
+        return None
+    if view.get("target") == _ELEMENT_ARRAY_BUFFER:
+        mode = "TRIANGLES" if count % 3 == 0 else "INDICES"
+        if byte_stride not in {2, 4}:
+            return None
+        return _MeshoptViewSpec(mode=mode, count=count, byte_stride=byte_stride, component_type=component_type)
+    if view.get("target") == _ARRAY_BUFFER and byte_stride % 4 == 0 and byte_stride <= 256:
+        return _MeshoptViewSpec(mode="ATTRIBUTES", count=count, byte_stride=byte_stride, component_type=component_type)
+    return None
+
+
+def _meshopt_encode(source: bytes, spec: _MeshoptViewSpec, meshoptimizer: Any) -> bytes:
+    if spec.mode in {"TRIANGLES", "INDICES"}:
+        dtype = np.dtype("<u2") if spec.byte_stride == 2 else np.dtype("<u4")
+        indices = np.frombuffer(source, dtype=dtype, count=spec.count).copy()
+        if spec.mode == "TRIANGLES":
+            return cast(bytes, meshoptimizer.encode_index_buffer(indices, index_count=spec.count))
+        return cast(bytes, meshoptimizer.encode_index_sequence(indices, index_count=spec.count))
+    vertices = np.frombuffer(source, dtype=np.uint8).reshape((spec.count, spec.byte_stride)).copy()
+    return cast(
+        bytes,
+        meshoptimizer.encode_vertex_buffer(vertices, vertex_count=spec.count, vertex_size=spec.byte_stride),
+    )
+
+
+def _append_aligned(payload: bytearray, data: bytes) -> int:
+    padding = (-len(payload)) % 4
+    if padding:
+        payload.extend(b"\x00" * padding)
+    offset = len(payload)
+    payload.extend(data)
+    return offset
+
+
+def _add_extension_used(document: dict[str, Any], extension: str) -> None:
+    extensions = document.setdefault("extensionsUsed", [])
+    if isinstance(extensions, list) and extension not in extensions:
+        extensions.append(extension)
+
+
+def _embed_binary_uri(document: dict[str, Any], binary: bytes) -> None:
+    buffers = _array(document.get("buffers"), "buffers")
+    buffer = _object(buffers[0], "buffer 0")
+    buffer["byteLength"] = len(binary)
+    buffer["uri"] = "data:application/octet-stream;base64," + base64.b64encode(binary).decode("ascii")
 
 
 def _lod_entry(mesh_index: int, lod: int, mesh: Mesh) -> dict[str, object]:

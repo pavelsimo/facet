@@ -469,7 +469,7 @@ asset.write_obj("motor.obj", options=fc.ObjExportOptions(materials=True, write_m
 asset.write_stl("motor.stl", options=fc.StlExportOptions(binary=True, merge=True))
 ```
 
-Compression flags are recorded in glTF extras so downstream packaging can make the final compression pass. Write report steps include output file size and file-size budget warnings when a budget is provided.
+`meshopt=True` writes `EXT_meshopt_compression` bufferView payloads while keeping fallback buffer data for validators and loaders that ignore the extension. Other compression flags are recorded in glTF extras for downstream packaging. Write report steps include output file size and file-size budget warnings when a budget is provided.
 
 ## Profiles
 
