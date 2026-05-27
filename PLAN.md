@@ -90,9 +90,10 @@ Parity gaps to track:
 3. CAD and mesh repair depth
    - Add an open-shell repair workflow: detect single open-shell parts, merge or group them before BREP healing, and keep separate warnings for unstitched faces.
    - Improve BREP healing beyond the current sewing/fix-edge path: sliver-face removal, duplicate face handling, tolerance unification, and visible report warnings for unsupported backend work.
-   - Extend mesh repair with duplicate-polygon deletion, true T-junction sewing, non-manifold edge cracking, and configurable face-orientation strategies for closed solids versus open shells.
+   - Mesh repair now deletes duplicate polygons and records before/after duplicate, degenerate, boundary-edge, and non-manifold metrics.
+   - Extend mesh repair with true T-junction sewing, non-manifold edge cracking, and configurable face-orientation strategies for closed solids versus open shells.
    - Add attribute-aware tolerance vertex merging that rebuilds connectivity across hard-edge and non-manifold borders without collapsing intentional material, normal, or UV seams.
-   - Add before/after repair metrics for duplicate polygons, degenerate polygons, T-junctions, non-manifold edges, boundary gaps, and flipped components.
+   - Add before/after repair metrics for T-junctions, boundary gaps, and flipped components.
 
 4. Tessellation controls
    - Expose a separate sag-ratio option instead of overloading `relative=True`.
@@ -186,7 +187,8 @@ These need more design and should not be mixed into documentation or diagnostics
    - BREP status now records wire, edge, free/unstitched-edge, small-edge, open-shell, and sliver-face counts.
    - `heal_brep` now stores those counts in per-part metadata and warns when open shells, free edges, or small edges remain after healing.
    - Unsupported sliver-face removal still reports a visible warning instead of claiming geometry was changed.
-   - Remaining polish: implement or delegate sliver-face removal, duplicate-face cleanup, and deeper face/wire repair before tessellation.
+   - Mesh repair now handles duplicate polygon cleanup after tessellation.
+   - Remaining polish: implement or delegate sliver-face removal, BREP duplicate-face cleanup, and deeper face/wire repair before tessellation.
 
 6. PMI and metadata output - first stability pass complete
    - STEP AP242 fixtures now test that advertised PMI is reported as present and unsupported when typed PMI import is unavailable.

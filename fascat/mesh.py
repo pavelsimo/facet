@@ -202,6 +202,7 @@ class Mesh:
         mesh = mesh._drop_invalid_faces()
         mesh = mesh._drop_non_finite()
         mesh = mesh.remove_unreferenced_vertices()
+        before_metrics = mesh.quality_metrics(area_epsilon=opts.area_epsilon)
         if opts.merge_vertices and opts.tolerance > 0.0:
             mesh = mesh.merge_close_vertices(opts.tolerance)
         mesh = mesh.remove_duplicate_faces()
@@ -215,6 +216,18 @@ class Mesh:
             mesh = mesh.fill_holes()
             if mesh.triangle_count != previous_triangle_count:
                 mesh = mesh.compute_normals()
+        after_metrics = mesh.quality_metrics(area_epsilon=opts.area_epsilon)
+        mesh.metadata = {
+            **mesh.metadata,
+            "repair_duplicate_polygons_before": str(int(before_metrics["duplicate_polygons"])),
+            "repair_duplicate_polygons_after": str(int(after_metrics["duplicate_polygons"])),
+            "repair_degenerate_triangles_before": str(int(before_metrics["degenerate_triangles"])),
+            "repair_degenerate_triangles_after": str(int(after_metrics["degenerate_triangles"])),
+            "repair_boundary_edges_before": str(int(before_metrics["boundary_edges"])),
+            "repair_boundary_edges_after": str(int(after_metrics["boundary_edges"])),
+            "repair_non_manifold_edges_before": str(int(before_metrics["non_manifold_edges"])),
+            "repair_non_manifold_edges_after": str(int(after_metrics["non_manifold_edges"])),
+        }
         mesh.validate()
         return mesh
 
@@ -295,6 +308,7 @@ class Mesh:
                 "max_aspect_ratio": 0.0,
                 "skinny_triangles": 0,
                 "degenerate_triangles": 0,
+                "duplicate_polygons": 0,
                 "short_edges": 0,
                 "long_edges": 0,
                 "boundary_edges": 0,
@@ -314,6 +328,8 @@ class Mesh:
         )
         finite_aspects = aspect_ratios[np.isfinite(aspect_ratios)]
         _edges, counts = self._undirected_edges_and_counts()
+        polygon_keys = np.sort(self.faces, axis=1)
+        _unique_polygons, polygon_counts = np.unique(polygon_keys, axis=0, return_counts=True)
 
         return {
             "vertices": self.vertex_count,
@@ -327,6 +343,7 @@ class Mesh:
             "max_aspect_ratio": float(finite_aspects.max()) if finite_aspects.size else 0.0,
             "skinny_triangles": int(np.count_nonzero(aspect_ratios > skinny_aspect_ratio)),
             "degenerate_triangles": int(np.count_nonzero(areas <= area_epsilon)),
+            "duplicate_polygons": int(np.sum(np.maximum(polygon_counts - 1, 0))),
             "short_edges": 0 if min_edge_length is None else int(np.count_nonzero(flat_lengths < min_edge_length)),
             "long_edges": 0 if max_edge_length is None else int(np.count_nonzero(flat_lengths > max_edge_length)),
             "boundary_edges": int(np.count_nonzero(counts == 1)),

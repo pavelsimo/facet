@@ -347,7 +347,7 @@ asset = fc.read_step("motor.step").tessellate(
 quality = asset.tessellation_quality_report()
 ```
 
-`part_settings` keys match a part id or part name. Quality reports include per-part edge length, triangle area, aspect ratio, skinny triangle, boundary edge, and non-manifold edge counts.
+`part_settings` keys match a part id or part name. Quality reports include per-part edge length, triangle area, aspect ratio, skinny triangle, duplicate polygon, boundary edge, and non-manifold edge counts.
 
 Tessellation parameters:
 
@@ -376,6 +376,8 @@ Repair parameters:
 | `fix_winding` | Normalize triangle winding where a consistent orientation can be inferred. |
 | `fill_small_holes` | Fill small mesh boundary loops as a fallback mesh repair step. |
 | `area_epsilon` | Area threshold used to classify degenerate triangles. |
+
+Repair metadata records before/after counts for `repair_duplicate_polygons`, `repair_degenerate_triangles`, `repair_boundary_edges`, and `repair_non_manifold_edges`. Duplicate polygons are triangles that reference the same three vertices, regardless of winding.
 
 ## Feature-Preserving Simplification
 

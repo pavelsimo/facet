@@ -74,7 +74,22 @@ def test_mesh_removes_degenerate_and_duplicate_faces() -> None:
     repaired = mesh.repair(RepairOptions())
 
     assert repaired.triangle_count == 1
+    assert repaired.metadata["repair_duplicate_polygons_before"] == "1"
+    assert repaired.metadata["repair_duplicate_polygons_after"] == "0"
+    assert repaired.metadata["repair_degenerate_triangles_before"] == "1"
+    assert repaired.metadata["repair_degenerate_triangles_after"] == "0"
     repaired.validate()
+
+
+def test_quality_metrics_counts_duplicate_polygons() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]], dtype=float),
+        faces=np.array([[0, 1, 2], [2, 1, 0], [0, 1, 3]], dtype=int),
+    )
+
+    metrics = mesh.quality_metrics()
+
+    assert metrics["duplicate_polygons"] == 1
 
 
 def test_mesh_merges_close_vertices_with_tolerance() -> None:
