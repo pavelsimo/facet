@@ -251,7 +251,7 @@ such as invalid numeric ranges, missing `external_path`, conflicting `where` /
 | `--geometry-quality` | `false` | Enable all geometry quality checks in the validation report |
 | `--non-manifold-edges` | `false` | Report non-manifold edge counts |
 | `--open-boundaries` | `false` | Report open boundary counts |
-| `--self-intersections` | `false` | Report detected self-intersections with bounded triangle-triangle checks |
+| `--self-intersections` | `false` | Report detected self-intersections with bounded triangle-triangle checks and lower-bound fields when the pair limit is hit |
 | `--sliver-triangles` | `false` | Report degenerate and sliver triangle stats |
 | `--tiny-parts` | `false` | Report tiny part stats |
 | `--draw-call-estimate` | `false` | Report material count and draw-call estimate |

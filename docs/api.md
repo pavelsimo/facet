@@ -856,7 +856,16 @@ print(report.summary)
 report.write_json("quality-report.json")
 ```
 
-The analysis report includes per-part topology counts, actual triangle self-intersection counts, degenerate and sliver triangle stats, tiny-part stats, material count, draw-call estimate, and visual-risk warnings derived from mesh quality and before/after pipeline report steps.
+The analysis report includes per-part topology counts, actual triangle
+self-intersection counts, degenerate and sliver triangle stats, tiny-part stats,
+material count, draw-call estimate, and visual-risk warnings derived from mesh
+quality and before/after pipeline report steps. Self-intersection checks ignore
+adjacent triangles that share vertices. Coplanar overlaps count as intersections,
+while point-only endpoint contact does not. If `max_self_intersection_pairs` is
+reached, `self_intersections_lower_bound` is `true` and the report includes
+`self_intersection_pairs_checked` and `self_intersection_pair_limit`;
+`self_intersection_warnings` is kept as a compatibility alias for
+`self_intersections`.
 
 Analysis parameters:
 

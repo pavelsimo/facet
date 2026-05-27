@@ -44,6 +44,7 @@ that are currently conservative approximations.
 - Approximate or metadata-only operations now surface public report warnings, and dry-run diagnostics classify planned operations as exact, approximate, or metadata-only.
 - Pipeline TOML files now validate supported keys, operation options, filter conflicts, and line-number diagnostics before conversion starts.
 - Tangent handedness and staged normal behavior are covered by regressions for mirrored UVs, material-index remapping, OBJ smoothing, and glTF tangent export.
+- Analysis reports now mark truncated self-intersection checks as lower bounds and cover coplanar overlap, endpoint contact, and adjacent-triangle exclusions.
 - Unsupported Draco compression now raises instead of silently writing uncompressed output.
 - Export file-size budgets are recorded and warn when outputs exceed the budget.
 - glTF LODs now include node-level `MSFT_lod` references in addition to Fascat extras.
@@ -134,12 +135,7 @@ Parity gaps to track:
 These are the next small-to-medium tasks. They should be handled before larger
 algorithmic work because they improve trust in the current tool.
 
-1. Analysis polish
-   - Add clearer lower-bound reporting when self-intersection checks hit `max_self_intersection_pairs`.
-   - Add tests for coplanar overlap, endpoint contact, and adjacent-triangle exclusions.
-   - Keep compatibility keys only where needed and document their migration path.
-
-2. Unity parity matrix
+1. Unity parity matrix
    - Add a compact docs table that maps Unity-inspired capabilities to Fascat status: implemented, approximate, unsupported, deferred.
    - Link each approximate feature to its report warning and next implementation step.
 

@@ -60,6 +60,13 @@ def _quality_asset() -> Asset:
     )
 
 
+def _asset_from_mesh(mesh: Mesh) -> Asset:
+    return Asset(
+        root=Node(id="root", name="root", children=[Node(id="part_node", name="Part", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", mesh=mesh)},
+    )
+
+
 def test_asset_analyze_reports_geometry_quality_and_visual_risks(tmp_path: Path) -> None:
     asset = _quality_asset()
 
@@ -113,16 +120,92 @@ def test_asset_analyze_reports_actual_triangle_self_intersections() -> None:
         ),
         faces=np.asarray([[0, 1, 2], [3, 4, 5], [6, 7, 8]], dtype=int),
     )
-    asset = Asset(
-        root=Node(id="root", name="root", children=[Node(id="part_node", name="Part", part_id="part")]),
-        parts={"part": Part(id="part", name="Part", mesh=mesh)},
-    )
+    asset = _asset_from_mesh(mesh)
 
     report = asset.analyze(AnalyzeOptions(self_intersections=True))
 
     assert report.summary["self_intersections"] == 1
     assert report.summary["self_intersection_warnings"] == 1
     assert report.parts[0]["self_intersections"] == 1
+
+
+def test_asset_analyze_reports_coplanar_overlap_self_intersections() -> None:
+    mesh = Mesh(
+        points=np.asarray(
+            [
+                [0.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [0.0, 2.0, 0.0],
+                [0.5, 0.5, 0.0],
+                [2.5, 0.5, 0.0],
+                [0.5, 2.5, 0.0],
+            ],
+            dtype=float,
+        ),
+        faces=np.asarray([[0, 1, 2], [3, 4, 5]], dtype=int),
+    )
+
+    report = _asset_from_mesh(mesh).analyze(AnalyzeOptions(self_intersections=True))
+
+    assert report.summary["self_intersections"] == 1
+    assert report.summary["self_intersections_lower_bound"] is False
+    assert report.parts[0]["self_intersections"] == 1
+
+
+def test_asset_analyze_ignores_endpoint_contact_between_triangles() -> None:
+    mesh = Mesh(
+        points=np.asarray(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [1.0, -1.0, 0.0],
+            ],
+            dtype=float,
+        ),
+        faces=np.asarray([[0, 1, 2], [3, 4, 5]], dtype=int),
+    )
+
+    report = _asset_from_mesh(mesh).analyze(AnalyzeOptions(self_intersections=True))
+
+    assert report.summary["self_intersections"] == 0
+    assert report.summary["self_intersection_pairs_checked"] == 1
+    assert report.parts[0]["self_intersections"] == 0
+
+
+def test_asset_analyze_ignores_adjacent_triangles_during_self_intersection_checks() -> None:
+    mesh = Mesh(
+        points=np.asarray([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]], dtype=float),
+        faces=np.asarray([[0, 1, 2], [2, 1, 3]], dtype=int),
+    )
+
+    report = _asset_from_mesh(mesh).analyze(AnalyzeOptions(self_intersections=True))
+
+    assert report.summary["self_intersections"] == 0
+    assert report.summary["self_intersection_pairs_checked"] == 0
+    assert report.parts[0]["self_intersections"] == 0
+
+
+def test_asset_analyze_marks_truncated_self_intersections_as_lower_bound() -> None:
+    points: list[list[float]] = []
+    faces: list[list[int]] = []
+    for index in range(4):
+        base = len(points)
+        offset = float(index * 10)
+        points.extend([[offset, 0.0, 0.0], [offset + 1.0, 0.0, 0.0], [offset, 1.0, 0.0]])
+        faces.append([base, base + 1, base + 2])
+    mesh = Mesh(points=np.asarray(points, dtype=float), faces=np.asarray(faces, dtype=int))
+
+    report = _asset_from_mesh(mesh).analyze(AnalyzeOptions(self_intersections=True, max_self_intersection_pairs=2))
+
+    assert report.summary["self_intersections"] == 0
+    assert report.summary["self_intersections_lower_bound"] is True
+    assert report.summary["self_intersection_pairs_checked"] == 2
+    assert report.summary["self_intersection_pair_limit"] == 2
+    assert report.parts[0]["self_intersections_lower_bound"] is True
+    assert any("self_intersections=0 is a lower bound" in warning for warning in report.warnings)
 
 
 def test_asset_analyze_does_not_count_aabb_only_self_intersection_candidates() -> None:
@@ -140,10 +223,7 @@ def test_asset_analyze_does_not_count_aabb_only_self_intersection_candidates() -
         ),
         faces=np.asarray([[0, 1, 2], [3, 4, 5]], dtype=int),
     )
-    asset = Asset(
-        root=Node(id="root", name="root", children=[Node(id="part_node", name="Part", part_id="part")]),
-        parts={"part": Part(id="part", name="Part", mesh=mesh)},
-    )
+    asset = _asset_from_mesh(mesh)
 
     report = asset.analyze(AnalyzeOptions(self_intersections=True))
 
