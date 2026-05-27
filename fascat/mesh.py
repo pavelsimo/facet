@@ -321,6 +321,7 @@ class Mesh:
         before_vertex_count = self.vertex_count
         before_triangle_count = self.triangle_count
         material_signatures = self._vertex_material_signatures() if opts.preserve_material_boundaries else None
+        skip_diagnostics = self._merge_vertex_skip_diagnostics(opts, material_signatures)
         old_to_new = np.empty(self.vertex_count, dtype=np.int64)
         representative_indices: list[int] = []
         key_to_new: dict[tuple[object, ...], int] = {}
@@ -365,9 +366,71 @@ class Mesh:
             "merge_vertices_preserve_tangents": str(opts.preserve_tangents).lower(),
             "merge_vertices_preserve_uvs": str(opts.preserve_uvs).lower(),
             "merge_vertices_preserve_material_boundaries": str(opts.preserve_material_boundaries).lower(),
+            **{key: str(value) for key, value in skip_diagnostics.items()},
         }
         mesh.validate()
         return mesh
+
+    def _merge_vertex_skip_diagnostics(
+        self,
+        options: MergeVerticesOptions,
+        material_signatures: tuple[tuple[int, ...], ...] | None,
+    ) -> dict[str, int]:
+        buckets: dict[tuple[float, ...] | tuple[int, ...], list[int]] = {}
+        for vertex_index, point in enumerate(self.points):
+            buckets.setdefault(_position_key(point, options.tolerance), []).append(vertex_index)
+
+        diagnostics = {
+            "merge_vertices_candidate_position_buckets": 0,
+            "merge_vertices_candidate_vertices": 0,
+            "merge_vertices_skipped_by_protection": 0,
+            "merge_vertices_skipped_by_normals": 0,
+            "merge_vertices_skipped_by_tangents": 0,
+            "merge_vertices_skipped_by_uvs": 0,
+            "merge_vertices_skipped_by_material_boundaries": 0,
+        }
+        for vertices in buckets.values():
+            if len(vertices) <= 1:
+                continue
+            diagnostics["merge_vertices_candidate_position_buckets"] += 1
+            diagnostics["merge_vertices_candidate_vertices"] += len(vertices) - 1
+            full_keys = {self._merge_vertex_key(vertex, options, material_signatures) for vertex in vertices}
+            skipped = len(full_keys) - 1
+            if skipped <= 0:
+                continue
+            diagnostics["merge_vertices_skipped_by_protection"] += skipped
+            if options.preserve_normals and self.normals is not None and self._has_distinct_normals(vertices):
+                diagnostics["merge_vertices_skipped_by_normals"] += skipped
+            if options.preserve_tangents and self.tangents is not None and self._has_distinct_tangents(vertices):
+                diagnostics["merge_vertices_skipped_by_tangents"] += skipped
+            if options.preserve_uvs and self._has_distinct_uvs(vertices):
+                diagnostics["merge_vertices_skipped_by_uvs"] += skipped
+            if material_signatures is not None and self._has_distinct_material_signatures(
+                vertices, material_signatures
+            ):
+                diagnostics["merge_vertices_skipped_by_material_boundaries"] += skipped
+        return diagnostics
+
+    def _has_distinct_normals(self, vertices: list[int]) -> bool:
+        assert self.normals is not None
+        return len({tuple(float(value) for value in self.normals[vertex]) for vertex in vertices}) > 1
+
+    def _has_distinct_tangents(self, vertices: list[int]) -> bool:
+        assert self.tangents is not None
+        return len({tuple(float(value) for value in self.tangents[vertex]) for vertex in vertices}) > 1
+
+    def _has_distinct_uvs(self, vertices: list[int]) -> bool:
+        for values in self.uvs.values():
+            if len({tuple(float(value) for value in values[vertex]) for vertex in vertices}) > 1:
+                return True
+        return False
+
+    def _has_distinct_material_signatures(
+        self,
+        vertices: list[int],
+        material_signatures: tuple[tuple[int, ...], ...],
+    ) -> bool:
+        return len({material_signatures[vertex] for vertex in vertices}) > 1
 
     def _merge_vertex_key(
         self,

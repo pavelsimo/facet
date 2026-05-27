@@ -145,6 +145,36 @@ def test_merge_vertices_preserves_attribute_seams_by_default() -> None:
     assert merged.normals is not None
     assert sorted(merged.uvs) == [0]
     assert merged.metadata["merge_vertices_removed"] == "0"
+    assert merged.metadata["merge_vertices_candidate_position_buckets"] == "1"
+    assert merged.metadata["merge_vertices_candidate_vertices"] == "1"
+    assert merged.metadata["merge_vertices_skipped_by_protection"] == "1"
+    assert merged.metadata["merge_vertices_skipped_by_normals"] == "1"
+    assert merged.metadata["merge_vertices_skipped_by_tangents"] == "0"
+    assert merged.metadata["merge_vertices_skipped_by_uvs"] == "1"
+    assert merged.metadata["merge_vertices_skipped_by_material_boundaries"] == "0"
+
+
+def test_merge_vertices_reports_tangent_and_material_boundary_protection() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 0]], dtype=float),
+        faces=np.array([[0, 1, 2], [3, 2, 1]], dtype=int),
+        normals=np.array([[0, 0, 1], [0, 0, 1], [0, 0, 1], [0, 0, 1]], dtype=float),
+        tangents=np.array([[1, 0, 0, 1], [1, 0, 0, 1], [1, 0, 0, 1], [0, 1, 0, -1]], dtype=float),
+        uvs={0: np.array([[0, 0], [1, 0], [0, 1], [0, 0]], dtype=float)},
+        material_indices=np.array([0, 1], dtype=int),
+    )
+
+    merged = mesh.merge_vertices(MergeVerticesOptions())
+
+    assert merged.vertex_count == 4
+    assert merged.metadata["merge_vertices_removed"] == "0"
+    assert merged.metadata["merge_vertices_candidate_position_buckets"] == "1"
+    assert merged.metadata["merge_vertices_candidate_vertices"] == "1"
+    assert merged.metadata["merge_vertices_skipped_by_protection"] == "1"
+    assert merged.metadata["merge_vertices_skipped_by_normals"] == "0"
+    assert merged.metadata["merge_vertices_skipped_by_tangents"] == "1"
+    assert merged.metadata["merge_vertices_skipped_by_uvs"] == "0"
+    assert merged.metadata["merge_vertices_skipped_by_material_boundaries"] == "1"
 
 
 def test_merge_vertices_can_ignore_attributes_and_remove_degenerates() -> None:

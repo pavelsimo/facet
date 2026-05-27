@@ -1162,18 +1162,24 @@ def _repair_report_stats(asset: Asset) -> dict[str, int]:
 
 def _merge_vertices_report_stats(asset: Asset) -> dict[str, int]:
     stats = asset.stats()
-    removed_vertices = 0
-    removed_degenerate_triangles = 0
+    merge_metadata_keys = (
+        "merge_vertices_removed",
+        "merge_vertices_degenerate_triangles_removed",
+        "merge_vertices_candidate_position_buckets",
+        "merge_vertices_candidate_vertices",
+        "merge_vertices_skipped_by_protection",
+        "merge_vertices_skipped_by_normals",
+        "merge_vertices_skipped_by_tangents",
+        "merge_vertices_skipped_by_uvs",
+        "merge_vertices_skipped_by_material_boundaries",
+    )
+    merge_metadata_totals = dict.fromkeys(merge_metadata_keys, 0)
     for part in asset.parts.values():
         if part.mesh is None:
             continue
-        removed_vertices += _metadata_int(part.mesh.metadata.get("merge_vertices_removed"), 0)
-        removed_degenerate_triangles += _metadata_int(
-            part.mesh.metadata.get("merge_vertices_degenerate_triangles_removed"),
-            0,
-        )
-    stats["merge_vertices_removed"] = removed_vertices
-    stats["merge_vertices_degenerate_triangles_removed"] = removed_degenerate_triangles
+        for key in merge_metadata_keys:
+            merge_metadata_totals[key] += _metadata_int(part.mesh.metadata.get(key), 0)
+    stats.update(merge_metadata_totals)
     return stats
 
 

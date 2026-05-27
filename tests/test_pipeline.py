@@ -327,6 +327,13 @@ def test_merge_vertices_asset_operation_reports_counts() -> None:
     assert step.after["triangles"] == 1
     assert step.after["merge_vertices_removed"] == 1
     assert step.after["merge_vertices_degenerate_triangles_removed"] == 1
+    assert step.after["merge_vertices_candidate_position_buckets"] == 1
+    assert step.after["merge_vertices_candidate_vertices"] == 1
+    assert step.after["merge_vertices_skipped_by_protection"] == 0
+    assert step.after["merge_vertices_skipped_by_normals"] == 0
+    assert step.after["merge_vertices_skipped_by_tangents"] == 0
+    assert step.after["merge_vertices_skipped_by_uvs"] == 0
+    assert step.after["merge_vertices_skipped_by_material_boundaries"] == 0
 
 
 def test_delete_degenerate_polygons_asset_operation_reports_counts() -> None:
