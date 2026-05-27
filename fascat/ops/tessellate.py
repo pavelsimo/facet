@@ -12,6 +12,9 @@ from fascat.mesh import Mesh
 from fascat.metadata import Metadata
 from fascat.options import Tessellation
 
+_FACE_GROUP_RISK_THRESHOLD = 64
+_DRAW_CALL_RISK_THRESHOLD = 16
+
 
 def tessellate_asset(asset: Asset, options: Tessellation, *, selected_part_ids: set[str] | None = None) -> Asset:
     result = asset.copy(keep_source=True)
@@ -53,7 +56,7 @@ def tessellate_asset(asset: Asset, options: Tessellation, *, selected_part_ids: 
             part.mesh = cached_mesh.copy()
         part.fingerprint = part.mesh.fingerprint()
         _record_tessellation_diagnostics(result, part, part_options)
-        _record_brep_patch_cleanup(part, part_options)
+        _record_brep_patch_cleanup(result, part, part_options)
         if not part_options.keep_brep:
             part.source_shape = None
     if selected_part_ids is not None:
@@ -207,6 +210,7 @@ def _apply_mesh_tessellation_controls(mesh: Mesh, options: Tessellation) -> Mesh
 def _record_tessellation_diagnostics(asset: Asset, part: Part, options: Tessellation) -> None:
     if part.mesh is None:
         return
+    _record_submesh_risk(asset, part)
     metrics: dict[str, int | float] | None = None
     if options.quality_report:
         metrics = _store_quality_report(part, options)
@@ -282,7 +286,7 @@ def _warn_long_polygons(
         asset.report.add_warning(f"part has {long_edges} tessellated edges longer than max_polygon_length: {part.name}")
 
 
-def _record_brep_patch_cleanup(part: Part, options: Tessellation) -> None:
+def _record_brep_patch_cleanup(asset: Asset, part: Part, options: Tessellation) -> None:
     if part.source_shape is None:
         return
     cleanup = "retained" if options.keep_brep else "deleted"
@@ -290,6 +294,80 @@ def _record_brep_patch_cleanup(part: Part, options: Tessellation) -> None:
     part.metadata["source_shape_retained"] = str(options.keep_brep).lower()
     if part.mesh is not None:
         part.mesh.metadata["brep_patch_cleanup"] = cleanup
+    if options.keep_brep:
+        patch_count = _source_patch_count(part)
+        part.metadata["brep_retained_patch_count"] = str(patch_count)
+        if part.mesh is not None:
+            part.mesh.metadata["brep_retained_patch_count"] = str(patch_count)
+        if patch_count >= _FACE_GROUP_RISK_THRESHOLD:
+            part.metadata["brep_patch_export_risk"] = "high"
+            if part.mesh is not None:
+                part.mesh.metadata["brep_patch_export_risk"] = "high"
+            asset.report.add_warning(
+                f"part retains {patch_count} BREP patch(es) after tessellation; "
+                f"review draw-call and export-size risk before runtime export: {part.name}"
+            )
+
+
+def _record_submesh_risk(asset: Asset, part: Part) -> None:
+    mesh = part.mesh
+    if mesh is None:
+        return
+    face_group_count = len(mesh.face_groups)
+    estimated_draw_calls = _estimated_part_draw_calls(part)
+    part.metadata["tessellation_face_groups"] = str(face_group_count)
+    part.metadata["tessellation_estimated_draw_calls"] = str(estimated_draw_calls)
+    mesh.metadata["tessellation_face_groups"] = str(face_group_count)
+    mesh.metadata["tessellation_estimated_draw_calls"] = str(estimated_draw_calls)
+    if face_group_count >= _FACE_GROUP_RISK_THRESHOLD:
+        part.metadata["tessellation_face_group_export_risk"] = "high"
+        mesh.metadata["tessellation_face_group_export_risk"] = "high"
+        asset.report.add_warning(
+            f"part has {face_group_count} CAD face group(s) after tessellation; "
+            f"per-face grouping can increase submesh or draw-call pressure: {part.name}"
+        )
+    if estimated_draw_calls >= _DRAW_CALL_RISK_THRESHOLD:
+        part.metadata["tessellation_draw_call_export_risk"] = "high"
+        mesh.metadata["tessellation_draw_call_export_risk"] = "high"
+        asset.report.add_warning(
+            f"part is estimated to emit {estimated_draw_calls} material draw call(s) after tessellation: {part.name}"
+        )
+
+
+def _estimated_part_draw_calls(part: Part) -> int:
+    mesh = part.mesh
+    if mesh is None or mesh.triangle_count == 0:
+        return 0
+    if mesh.material_indices is None:
+        return 1
+    return len(set(mesh.material_indices.astype(int).tolist()))
+
+
+def _source_patch_count(part: Part) -> int:
+    for value in (
+        part.metadata.get("source_faces"),
+        None if part.mesh is None else part.mesh.metadata.get("occt_faces"),
+        None if part.mesh is None else part.mesh.metadata.get("tessellation_face_groups"),
+    ):
+        count = _metadata_int(value)
+        if count is not None:
+            return count
+    return 0
+
+
+def _metadata_int(value: object) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
 
 
 def _tessellation_mesh_options(options: Tessellation) -> dict[str, object]:

@@ -213,6 +213,66 @@ def test_tessellation_keep_brep_controls_source_shape_retention(monkeypatch) -> 
     assert kept.parts["part"].metadata["source_shape_retained"] == "true"
 
 
+def test_tessellation_warns_about_retained_patch_and_submesh_risk(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import fascat.ops.tessellate as tessellate_module
+
+    source_shape = object()
+    material_ids = [f"mat_{index}" for index in range(16)]
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="Panel", part_id="part")]),
+        parts={
+            "part": Part(
+                id="part",
+                name="Panel",
+                source_shape=source_shape,
+                material_ids=material_ids,
+                metadata={"source_faces": "65"},
+            )
+        },
+    )
+
+    def fake_tessellate_shape(shape: object, _options: Tessellation, **_kwargs: object) -> Mesh:
+        assert shape is source_shape
+        face_count = 65
+        points = np.asarray(
+            [
+                point
+                for face_index in range(face_count)
+                for point in ((face_index, 0, 0), (face_index, 1, 0), (face_index, 0, 1))
+            ],
+            dtype=float,
+        )
+        faces = np.asarray([[index * 3, index * 3 + 1, index * 3 + 2] for index in range(face_count)], dtype=int)
+        return Mesh(
+            points=points,
+            faces=faces,
+            material_indices=np.asarray([index % len(material_ids) for index in range(face_count)], dtype=int),
+            face_groups={f"occt_face_{index}": np.asarray([index], dtype=int) for index in range(face_count)},
+            metadata={"occt_faces": str(face_count)},
+        )
+
+    monkeypatch.setattr(tessellate_module, "tessellate_shape", fake_tessellate_shape)
+
+    tessellated = asset.tessellate(Tessellation(keep_brep=True))
+    part = tessellated.parts["part"]
+    assert part.mesh is not None
+    assert part.metadata["tessellation_face_groups"] == "65"
+    assert part.metadata["tessellation_estimated_draw_calls"] == "16"
+    assert part.metadata["tessellation_face_group_export_risk"] == "high"
+    assert part.metadata["tessellation_draw_call_export_risk"] == "high"
+    assert part.metadata["brep_retained_patch_count"] == "65"
+    assert part.metadata["brep_patch_export_risk"] == "high"
+    assert part.mesh.metadata["tessellation_face_groups"] == "65"
+    assert part.mesh.metadata["brep_retained_patch_count"] == "65"
+    assert tessellated.report.steps[-1].warnings == [
+        "part has 65 CAD face group(s) after tessellation; "
+        "per-face grouping can increase submesh or draw-call pressure: Panel",
+        "part is estimated to emit 16 material draw call(s) after tessellation: Panel",
+        "part retains 65 BREP patch(es) after tessellation; "
+        "review draw-call and export-size risk before runtime export: Panel",
+    ]
+
+
 def test_tessellate_reuses_existing_meshes_by_default(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     import fascat.ops.tessellate as tessellate_module
 

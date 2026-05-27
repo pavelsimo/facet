@@ -377,7 +377,7 @@ asset = fc.read_step("motor.step").tessellate(
 quality = asset.tessellation_quality_report()
 ```
 
-`part_settings` keys match a part id or part name. Quality reports include per-part edge length, triangle area, aspect ratio, skinny triangle, duplicate polygon, boundary edge, and non-manifold edge counts.
+`part_settings` keys match a part id or part name. Quality reports include per-part edge length, triangle area, aspect ratio, skinny triangle, duplicate polygon, boundary edge, and non-manifold edge counts. Tessellated parts also record `tessellation_face_groups`, `tessellation_estimated_draw_calls`, and retained-patch counts when available; the tessellation step warns when retained BREP patches, CAD face groups, or material splits are likely to increase submesh, draw-call, or export-size pressure.
 
 Tessellation parameters:
 
@@ -396,7 +396,7 @@ Tessellation parameters:
 | `quality_report` | Record per-part tessellation quality metrics for later reporting. |
 | `free_edge_report` | Record free/boundary edge and non-manifold edge counts on tessellated parts and warn when free edges are present. |
 | `create_normals` | Generate normals during tessellation when the backend can provide them. |
-| `keep_brep` | Keep source BREP handles on parts after tessellation for later BREP-aware operations. Tessellated parts record `brep_patch_cleanup=retained` or `deleted`. |
+| `keep_brep` | Keep source BREP handles on parts after tessellation for later BREP-aware operations. Tessellated parts record `brep_patch_cleanup=retained` or `deleted` and warn when many retained patches could increase runtime/export risk. |
 | `reuse_existing_meshes` | Reuse meshes already present on imported parts. Set to `False` to retessellate from source BREP where available. |
 | `part_settings` | Per-part overrides keyed by part id or part name. Supports the same tessellation option names. |
 
