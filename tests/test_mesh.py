@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from fascat.mesh import Mesh, MeshValidationError
-from fascat.options import MergeVerticesOptions, RepairOptions
+from fascat.options import DeleteDegeneratePolygonsOptions, MergeVerticesOptions, RepairOptions
 
 
 def valid_triangle(**overrides: object) -> Mesh:
@@ -168,6 +168,28 @@ def test_merge_vertices_can_ignore_attributes_and_remove_degenerates() -> None:
     assert merged.metadata["merge_vertices_removed"] == "1"
     assert merged.metadata["merge_vertices_degenerate_triangles_removed"] == "1"
     merged.validate()
+
+
+def test_delete_degenerate_polygons_reports_noop_and_removed_counts() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [2, 0, 0]], dtype=float),
+        faces=np.array([[0, 1, 2], [0, 0, 1], [0, 1, 3]], dtype=int),
+    )
+
+    cleaned = mesh.delete_degenerate_polygons(DeleteDegeneratePolygonsOptions(area_epsilon=1e-12))
+
+    assert cleaned.triangle_count == 1
+    assert cleaned.vertex_count == 3
+    assert cleaned.metadata["delete_degenerate_polygons_before"] == "2"
+    assert cleaned.metadata["delete_degenerate_polygons_after"] == "0"
+    assert cleaned.metadata["delete_degenerate_polygons_removed"] == "2"
+    assert cleaned.metadata["delete_degenerate_polygons_vertices_removed"] == "1"
+
+    noop = cleaned.delete_degenerate_polygons(DeleteDegeneratePolygonsOptions())
+
+    assert noop.triangle_count == 1
+    assert noop.metadata["delete_degenerate_polygons_before"] == "0"
+    assert noop.metadata["delete_degenerate_polygons_removed"] == "0"
 
 
 def test_quality_metrics_counts_duplicate_polygons() -> None:

@@ -101,6 +101,7 @@ Core pipeline calls:
 | `asset.tessellate(options, where=None)` | `options` is `Tessellation`. `where` optionally scopes the operation with a `Filter`. | Convert source BREP geometry into meshes. |
 | `asset.repair(options, where=None)` | `options` is `RepairOptions`. `where` optionally scopes selected parts. | Clean mesh-level issues after tessellation. |
 | `asset.merge_vertices(options, where=None)` | `options` is `MergeVerticesOptions`. `where` optionally scopes selected parts. | Merge exact or tolerance-close vertices with attribute and material-boundary protection. |
+| `asset.delete_degenerate_polygons(options, where=None)` | `options` is `DeleteDegeneratePolygonsOptions`. `where` optionally scopes selected parts. | Remove repeated-vertex or near-zero-area triangles as a standalone cleanup step. |
 | `asset.stage(options, where=None)` | `options` is `StageOptions`. `where` optionally scopes selected parts. | Prepare materials, normals, tangents, and UV metadata for runtime export. |
 | `asset.optimize(options, where=None)` | `options` is `OptimizeOptions`. `where` optionally scopes selected parts. | Reduce mesh complexity while preserving selected mechanical features. |
 | `asset.lods(options, where=None)` | `options` is `LODOptions`. `where` optionally scopes selected parts. | Generate lower-detail runtime meshes. |
@@ -436,6 +437,13 @@ Repair metadata records before/after counts for `repair_duplicate_polygons`, `re
 
 Use `MergeVerticesOptions` when you want Unity-style vertex merge as a standalone pipeline step instead of the broad repair pass. `tolerance=0.0` merges exact duplicate positions; larger values merge tolerance-close positions. By default the operation keeps normals, tangents, UVs, and material-boundary signatures in the merge key so hard edges and UV seams are not collapsed accidentally. Set `preserve_normals=False`, `preserve_tangents=False`, or `preserve_uvs=False` to ignore and drop those attributes during merging. Reports include `merge_vertices_removed`, `merge_vertices_degenerate_triangles_removed`, and a unit-aware `tolerance_policy`.
 
+Use `DeleteDegeneratePolygonsOptions` when you want Unity-style degenerate
+polygon cleanup as a standalone, reproducible step. `area_epsilon` controls the
+near-zero-area threshold. The operation always writes a report step, even when
+no polygons are removed, and per-part metadata records before/after degenerate
+counts, removed triangle counts, removed unreferenced vertices, and the
+unit-aware area threshold.
+
 ## Feature-Preserving Simplification
 
 Optimization can protect mechanical features while reducing triangle count. Preservation flags keep protected faces from being dropped when a target would otherwise remove them.
@@ -765,7 +773,7 @@ fc.convert("motor.step", "motor.gltf", profile="realtime-web")
 ```
 
 `fc.convert()` validates generated output by default. Pass `validate_output=False` only when another step in your pipeline validates the asset.
-When `where` is provided to `fc.convert()`, tessellation, repair, and staging still run for the full asset, while standalone vertex merging, hierarchy merge, scene optimization, optimization actions, optimization, and LOD generation are scoped to the matched assembly subset.
+When `where` is provided to `fc.convert()`, tessellation, repair, and staging still run for the full asset, while standalone vertex merging, standalone degenerate-polygon cleanup, hierarchy merge, scene optimization, optimization actions, optimization, and LOD generation are scoped to the matched assembly subset.
 
 Conversion parameters:
 
@@ -779,6 +787,7 @@ Conversion parameters:
 | `heal_brep` | Optional BREP healing step before tessellation. |
 | `stage` | Overrides the profile staging step. |
 | `merge_vertices` | Optional standalone vertex merge step after staging. |
+| `delete_degenerate_polygons` | Optional standalone degenerate-polygon cleanup step after vertex merging. |
 | `merge`, `explode`, `replace` | Optional hierarchy operations run after staging. |
 | `scene` | Optional scene optimization step. |
 | `bake_materials`, `remove_holes`, `remove_occluded`, `decimate`, `lod_generator` | Optional explicit optimization actions. |
@@ -934,6 +943,7 @@ asset = fc.read_step("motor.step")
 asset = fc.tessellate(asset, sag=0.1, angle=15.0)
 asset = fc.repair(asset, tolerance=0.05)
 asset = fc.merge_vertices(asset, tolerance=0.001)
+asset = fc.delete_degenerate_polygons(asset, area_epsilon=1e-12)
 asset = fc.stage(asset, materials="cad", uv0="box")
 asset = fc.optimize(asset, target_triangles=500_000)
 asset = fc.lods(asset, ratios=(0.5, 0.25, 0.1))

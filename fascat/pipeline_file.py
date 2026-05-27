@@ -14,6 +14,7 @@ from fascat.options import (
     BakeMaterialOptions,
     BrepHealOptions,
     DecimateOptions,
+    DeleteDegeneratePolygonsOptions,
     ExplodeOptions,
     LODGeneratorOptions,
     LODLevel,
@@ -39,6 +40,7 @@ _SUPPORTED_STEP_OPS = frozenset(
         "tessellate",
         "repair",
         "merge_vertices",
+        "delete_degenerate_polygons",
         "stage",
         "merge",
         "explode",
@@ -145,6 +147,7 @@ _MERGE_VERTICES_KEYS = frozenset(
         "area_epsilon",
     }
 )
+_DELETE_DEGENERATE_POLYGONS_KEYS = frozenset({"area_epsilon"})
 _BREP_HEAL_KEYS = frozenset(
     {
         "tolerance",
@@ -277,6 +280,7 @@ _STEP_OPTION_KEYS = {
     "tessellate": _TESSELLATION_KEYS,
     "repair": _REPAIR_KEYS,
     "merge_vertices": _MERGE_VERTICES_KEYS,
+    "delete_degenerate_polygons": _DELETE_DEGENERATE_POLYGONS_KEYS,
     "stage": _STAGE_KEYS,
     "merge": _MERGE_KEYS,
     "explode": _EXPLODE_KEYS,
@@ -716,6 +720,8 @@ def _validate_step_options(
             _repair_options(step.values)
         elif step.op == "merge_vertices":
             _merge_vertices_options(step.values)
+        elif step.op == "delete_degenerate_polygons":
+            _delete_degenerate_polygons_options(step.values)
         elif step.op == "stage":
             _stage_options(step.values)
         elif step.op == "merge":
@@ -761,6 +767,8 @@ def _apply_step(asset: Asset, step: PipelineStep, where: Filter | None) -> Asset
         return asset.repair(_repair_options(values), where=where)
     if step.op == "merge_vertices":
         return asset.merge_vertices(_merge_vertices_options(values), where=where)
+    if step.op == "delete_degenerate_polygons":
+        return asset.delete_degenerate_polygons(_delete_degenerate_polygons_options(values), where=where)
     if step.op == "stage":
         return asset.stage(_stage_options(values), where=where)
     if step.op == "merge":
@@ -830,6 +838,10 @@ def _merge_vertices_options(values: dict[str, object]) -> MergeVerticesOptions:
         delete_degenerate=bool(values.get("delete_degenerate", True)),
         area_epsilon=_as_float(values.get("area_epsilon", 1e-12)),
     )
+
+
+def _delete_degenerate_polygons_options(values: dict[str, object]) -> DeleteDegeneratePolygonsOptions:
+    return DeleteDegeneratePolygonsOptions(area_epsilon=_as_float(values.get("area_epsilon", 1e-12)))
 
 
 def _brep_heal_options(values: dict[str, object]) -> BrepHealOptions:

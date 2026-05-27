@@ -29,6 +29,7 @@ from fascat.options import (
     BrepHealOptions,
     ConversionProfile,
     DecimateOptions,
+    DeleteDegeneratePolygonsOptions,
     ExplodeOptions,
     GltfExportOptions,
     LODGeneratorOptions,
@@ -727,6 +728,14 @@ def cmd_convert(
         float,
         typer.Option("--merge-vertex-area-epsilon", help="Area threshold for degenerate polygons after merging."),
     ] = 1e-12,
+    delete_degenerate_polygons: Annotated[
+        bool,
+        typer.Option("--delete-degenerate-polygons", help="Run standalone degenerate polygon cleanup."),
+    ] = False,
+    degenerate_area_epsilon: Annotated[
+        float,
+        typer.Option("--degenerate-area-epsilon", help="Area threshold for standalone degenerate polygon cleanup."),
+    ] = 1e-12,
     texel_density: Annotated[
         float | None,
         typer.Option("--texel-density", help="UV texel density metadata for unwrap and atlas workflows."),
@@ -1153,6 +1162,8 @@ def cmd_convert(
         "preserve_merge_vertex_material_boundaries": preserve_merge_vertex_material_boundaries,
         "delete_merge_vertex_degenerate": delete_merge_vertex_degenerate,
         "merge_vertex_area_epsilon": merge_vertex_area_epsilon,
+        "delete_degenerate_polygons": delete_degenerate_polygons,
+        "degenerate_area_epsilon": degenerate_area_epsilon,
         "texel_density": texel_density,
         "uv_padding": uv_padding,
         "max_stretch": max_stretch,
@@ -1490,6 +1501,11 @@ def cmd_convert(
             if merge_vertices
             else None
         )
+        delete_degenerate_polygons_options = (
+            DeleteDegeneratePolygonsOptions(area_epsilon=degenerate_area_epsilon)
+            if delete_degenerate_polygons
+            else None
+        )
         import_options = (
             pipeline_spec.import_options
             if pipeline_spec and pipeline_spec.import_options
@@ -1673,6 +1689,7 @@ def cmd_convert(
             import_options=import_options,
             heal_brep=heal_options,
             merge_vertices=merge_vertices_options,
+            delete_degenerate_polygons=delete_degenerate_polygons_options,
             merge=merge_options,
             explode=explode_options,
             replace=replace_options,
@@ -1968,6 +1985,12 @@ def _convert_operation_diagnostics(payload: dict[str, Any]) -> list[dict[str, st
             "merge_vertices",
             "exact",
             "exact or tolerance-close vertices are merged with selected attribute and material-boundary protections",
+        )
+    if payload["delete_degenerate_polygons"]:
+        add(
+            "delete_degenerate_polygons",
+            "exact",
+            "degenerate polygons are removed with the requested area threshold and before/after counts",
         )
     if payload["merge"]:
         add("merge", "exact", "selected hierarchy is merged according to the requested merge mode")
@@ -2355,6 +2378,7 @@ def _convert_for_cli(
     import_options: StepReadOptions,
     heal_brep: BrepHealOptions | None,
     merge_vertices: MergeVerticesOptions | None,
+    delete_degenerate_polygons: DeleteDegeneratePolygonsOptions | None,
     merge: MergeOptions | None,
     explode: ExplodeOptions | None,
     replace: ReplaceOptions | None,
@@ -2389,6 +2413,7 @@ def _convert_for_cli(
                 import_options,
                 heal_brep,
                 merge_vertices,
+                delete_degenerate_polygons,
                 merge,
                 explode,
                 replace,
@@ -2418,6 +2443,7 @@ def _convert_for_cli(
         import_options,
         heal_brep,
         merge_vertices,
+        delete_degenerate_polygons,
         merge,
         explode,
         replace,
@@ -2449,6 +2475,7 @@ def _convert_output(
     import_options: StepReadOptions,
     heal_brep: BrepHealOptions | None,
     merge_vertices: MergeVerticesOptions | None,
+    delete_degenerate_polygons: DeleteDegeneratePolygonsOptions | None,
     merge: MergeOptions | None,
     explode: ExplodeOptions | None,
     replace: ReplaceOptions | None,
@@ -2483,6 +2510,7 @@ def _convert_output(
                 tessellation=tessellation,
                 heal_brep=heal_brep,
                 merge_vertices=merge_vertices,
+                delete_degenerate_polygons=delete_degenerate_polygons,
                 stage=stage,
                 merge=merge,
                 explode=explode,
@@ -2516,6 +2544,7 @@ def _convert_output(
         tessellation=tessellation,
         heal_brep=heal_brep,
         merge_vertices=merge_vertices,
+        delete_degenerate_polygons=delete_degenerate_polygons,
         stage=stage,
         merge=merge,
         explode=explode,

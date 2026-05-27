@@ -12,6 +12,7 @@ from fascat.options import (
     BakeMaterialOptions,
     ConversionProfile,
     DecimateOptions,
+    DeleteDegeneratePolygonsOptions,
     ExplodeOptions,
     GltfExportOptions,
     LODGeneratorOptions,
@@ -328,6 +329,31 @@ def test_merge_vertices_asset_operation_reports_counts() -> None:
     assert step.after["merge_vertices_degenerate_triangles_removed"] == 1
 
 
+def test_delete_degenerate_polygons_asset_operation_reports_counts() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [2, 0, 0]], dtype=float),
+        faces=np.array([[0, 1, 2], [0, 0, 1], [0, 1, 3]], dtype=int),
+    )
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="node", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", mesh=mesh)},
+    )
+
+    cleaned = asset.delete_degenerate_polygons(DeleteDegeneratePolygonsOptions(area_epsilon=1e-12))
+    part = cleaned.parts["part"]
+    step = cleaned.report.steps[-1]
+
+    assert part.mesh is not None
+    assert part.mesh.triangle_count == 1
+    assert part.mesh.metadata["delete_degenerate_polygons_removed"] == "2"
+    assert step.name == "delete_degenerate_polygons"
+    assert step.options["area_epsilon"] == 1e-12
+    assert step.after["triangles"] == 1
+    assert step.after["delete_degenerate_polygons_before"] == 2
+    assert step.after["delete_degenerate_polygons_after"] == 0
+    assert step.after["delete_degenerate_polygons_removed"] == 2
+
+
 def test_asset_operation_reports_include_options_and_before_after_counts() -> None:
     required_counts = {"nodes", "parts", "occurrences", "materials", "vertices", "triangles"}
     required_options = {
@@ -366,6 +392,7 @@ def test_asset_operation_reports_include_options_and_before_after_counts() -> No
             "delete_degenerate",
             "area_epsilon",
         },
+        "delete_degenerate_polygons": {"area_epsilon"},
         "stage": {
             "materials",
             "material_mode",
@@ -441,6 +468,10 @@ def test_asset_operation_reports_include_options_and_before_after_counts() -> No
         ("tessellate", lambda asset: asset.tessellate()),
         ("repair", lambda asset: asset.repair(RepairOptions())),
         ("merge_vertices", lambda asset: asset.merge_vertices(MergeVerticesOptions())),
+        (
+            "delete_degenerate_polygons",
+            lambda asset: asset.delete_degenerate_polygons(DeleteDegeneratePolygonsOptions()),
+        ),
         ("stage", lambda asset: asset.stage(StageOptions(uv0="none", uv1=None))),
         ("optimize", lambda asset: asset.optimize()),
         ("lods", lambda asset: asset.lods(LODOptions((0.5,)))),
@@ -603,6 +634,25 @@ def test_pipeline_applies_merge_vertices_step() -> None:
     assert merged.parts["part"].mesh.vertex_count == 3
     assert merged.report.steps[-1].name == "merge_vertices"
     assert merged.report.steps[-1].options["preserve_uvs"] is False
+
+
+def test_pipeline_applies_delete_degenerate_polygons_step() -> None:
+    spec = PipelineSpec.from_dict({"steps": [{"op": "delete_degenerate_polygons", "area_epsilon": 1e-12}]})
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [2, 0, 0]], dtype=float),
+        faces=np.array([[0, 1, 2], [0, 1, 3]], dtype=int),
+    )
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="node", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", mesh=mesh)},
+    )
+
+    cleaned = spec.apply(asset)
+
+    assert cleaned.parts["part"].mesh is not None
+    assert cleaned.parts["part"].mesh.triangle_count == 1
+    assert cleaned.report.steps[-1].name == "delete_degenerate_polygons"
+    assert cleaned.report.steps[-1].after["delete_degenerate_polygons_removed"] == 1
 
 
 def test_pipeline_validates_step_options_during_parse() -> None:

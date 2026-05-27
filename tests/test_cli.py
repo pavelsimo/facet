@@ -245,6 +245,29 @@ def test_convert_dry_run_reports_merge_vertices_operation() -> None:
     assert diagnostics["merge_vertices"]["level"] == "exact"
 
 
+def test_convert_dry_run_reports_delete_degenerate_polygons_operation() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "--dry-run",
+            "convert",
+            "input.step",
+            "output.glb",
+            "--delete-degenerate-polygons",
+            "--degenerate-area-epsilon",
+            "0.00001",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    diagnostics = {item["operation"]: item for item in payload["operation_diagnostics"]}
+    assert payload["delete_degenerate_polygons"] is True
+    assert payload["degenerate_area_epsilon"] == 0.00001
+    assert diagnostics["delete_degenerate_polygons"]["level"] == "exact"
+
+
 def test_convert_dry_run_defaults_output_to_usdc() -> None:
     result = runner.invoke(app, ["--json", "--dry-run", "convert", "input.step"])
     assert result.exit_code == 0

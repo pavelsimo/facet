@@ -173,6 +173,18 @@ class MergeVerticesOptions:
 
 
 @dataclass(frozen=True)
+class DeleteDegeneratePolygonsOptions:
+    area_epsilon: float = 1e-12
+
+    def __post_init__(self) -> None:
+        if self.area_epsilon < 0.0:
+            raise ValueError("area_epsilon must be greater than or equal to 0")
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class StepReadOptions:
     metadata: bool = True
     product_metadata: bool = True

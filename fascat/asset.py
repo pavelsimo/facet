@@ -15,6 +15,7 @@ from fascat.options import (
     BakeMaterialOptions,
     BrepHealOptions,
     DecimateOptions,
+    DeleteDegeneratePolygonsOptions,
     ExplodeOptions,
     GltfExportOptions,
     LODGeneratorOptions,
@@ -393,6 +394,43 @@ class Asset:
             options=_options_with_scope({**opts.to_dict(), "tolerance_policy": tolerance_policy}, scope),
             before=before,
             after=_merge_vertices_report_stats(asset),
+            duration=timer.duration,
+        )
+        return asset
+
+    def delete_degenerate_polygons(
+        self,
+        options: DeleteDegeneratePolygonsOptions | None = None,
+        *,
+        where: Any | None = None,
+    ) -> Asset:
+        opts = options or DeleteDegeneratePolygonsOptions()
+        scope = self._operation_scope(where)
+        before = self.stats()
+        tolerance_policy = _tolerance_policy(
+            scope.asset,
+            length_tolerance=0.0,
+            area_tolerance=opts.area_epsilon,
+            length_key="delete_degenerate_polygons_tolerance",
+            area_key="delete_degenerate_polygons_area_epsilon",
+            operations={"degenerate_polygon_cleanup": "enabled"},
+        )
+        unit_metadata = _tolerance_policy_metadata("delete_degenerate_polygons", tolerance_policy)
+        with timed_step() as timer:
+            asset = scope.asset.copy(keep_source=True)
+            for part in asset.parts.values():
+                if scope.selected_part_ids is not None and part.id not in scope.selected_part_ids:
+                    continue
+                if part.mesh is None:
+                    continue
+                part.mesh = part.mesh.delete_degenerate_polygons(opts)
+                part.mesh.metadata = {**part.mesh.metadata, **unit_metadata}
+                part.fingerprint = part.mesh.fingerprint()
+        asset.report.add_step(
+            "delete_degenerate_polygons",
+            options=_options_with_scope({**opts.to_dict(), "tolerance_policy": tolerance_policy}, scope),
+            before=before,
+            after=_delete_degenerate_polygons_report_stats(asset),
             duration=timer.duration,
         )
         return asset
@@ -1111,6 +1149,26 @@ def _merge_vertices_report_stats(asset: Asset) -> dict[str, int]:
         )
     stats["merge_vertices_removed"] = removed_vertices
     stats["merge_vertices_degenerate_triangles_removed"] = removed_degenerate_triangles
+    return stats
+
+
+def _delete_degenerate_polygons_report_stats(asset: Asset) -> dict[str, int]:
+    stats = asset.stats()
+    before = 0
+    after = 0
+    removed = 0
+    removed_vertices = 0
+    for part in asset.parts.values():
+        if part.mesh is None:
+            continue
+        before += _metadata_int(part.mesh.metadata.get("delete_degenerate_polygons_before"), 0)
+        after += _metadata_int(part.mesh.metadata.get("delete_degenerate_polygons_after"), 0)
+        removed += _metadata_int(part.mesh.metadata.get("delete_degenerate_polygons_removed"), 0)
+        removed_vertices += _metadata_int(part.mesh.metadata.get("delete_degenerate_polygons_vertices_removed"), 0)
+    stats["delete_degenerate_polygons_before"] = before
+    stats["delete_degenerate_polygons_after"] = after
+    stats["delete_degenerate_polygons_removed"] = removed
+    stats["delete_degenerate_polygons_vertices_removed"] = removed_vertices
     return stats
 
 

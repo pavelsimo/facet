@@ -406,6 +406,7 @@ def test_size_adaptive_tessellation_requires_bands() -> None:
         ),
         (lambda: fc.MergeVerticesOptions(tolerance=-1), "merge vertices tolerance"),
         (lambda: fc.MergeVerticesOptions(area_epsilon=-1), "area_epsilon"),
+        (lambda: fc.DeleteDegeneratePolygonsOptions(area_epsilon=-1), "area_epsilon"),
         (lambda: fc.RepairOptions(tolerance=-1), "tolerance"),
         (lambda: fc.RepairOptions(area_epsilon=-1), "area_epsilon"),
         (lambda: fc.StageOptions(materials="bad"), "materials"),

@@ -100,6 +100,9 @@ that are currently conservative approximations.
 - Vertex merging is now available as a standalone Unity-style operation through
   Python, CLI flags, and TOML pipelines with attribute/material-boundary
   protection, unit-aware tolerance reporting, and before/after merge counts.
+- Degenerate-polygon cleanup is now available as a standalone Unity-style
+  operation through Python, CLI flags, and TOML pipelines with area-threshold
+  controls, scoped selection support, no-op reports, and before/after counts.
 - Conversion reports now include a resolved conversion manifest with the
   effective profile, import options, direct or pipeline operation settings, and
   export settings needed to reproduce a run.
@@ -132,10 +135,10 @@ Comparison snapshot:
 | Area | Fascat today | Missing for closer Unity parity |
 | --- | --- | --- |
 | Import | STEP-centric import with hierarchy, transforms, metadata, colors, repeated-part handling, PMI presence reporting, existing-mesh reuse intent, construction-only point/line cleanup controls, source-space normalization reporting, and BREP patch cleanup reporting after tessellation. | True multi-file/multi-root import semantics, design-variant import, typed/visual PMI, mixed BREP construction-curve cleanup, native CAD/JT/IFC/Parasolid/IGES coverage, and richer per-part loaded-representation reports. |
-| Repair and tessellation | BREP sewing/fix-edge path, mesh duplicate/degenerate/T-junction/boundary-gap/flipped-component diagnostics, unit-aware repair tolerance reporting, sag/sag-ratio/angle/max-length controls, bounding-box-derived tessellation helpers, free-edge diagnostics, reusable existing mesh control, and retained patch / submesh risk warnings. | Open-shell grouping, unstitched-face handling, T-junction sewing, boundary-gap stitching, non-manifold edge cracking, selectable face/normal orientation strategies, CAD-derived UV modes, targeted tessellation by material/metadata/curvature, and optional free-edge geometry output. |
-| Staging | Normal/tangent generation, box/unwrap/lightmap UV modes, UV copy/normalization, UV validation, UV island/distortion/packing diagnostics, material normalization, duplicate-material merge, and metadata-only atlas intent. | Unity-style UV0 tileable versus UV1 bake workflows with segmentation, lines of interest, island merge/alignment, real repack/padding/share-map controls, material-library mapping, real atlas textures, AO/lightmap baking, and texture cleanup. |
-| Optimization | Mesh simplification, measured error reporting, sampled occlusion removal, exact instance reconstruction, scene merge/split utilities, draw-call breakdown reports, and UV-importance modes. | Global assembly target allocation with iterative memory thresholds, real geometric-error bounded simplification, AO/user-weighted decimation, standard/advanced occlusion backends, retopology/proxy mesh generation, duplicate image/material cleanup, and merge reports that quantify culling, memory, and file-size tradeoffs. |
-| LODs | LOD ratios, screen-coverage metadata, validation, skipped-part reporting, and glTF `MSFT_lod` metadata. | Occurrence-level LOD group authoring with preserved instance relationships, optimized LOD0 as master asset, far-LOD one-mesh/one-material baking, switching-distance validation, and engine-specific runtime export profiles. |
+| Repair and tessellation | BREP sewing/fix-edge path, mesh duplicate/degenerate/T-junction/boundary-gap/flipped-component diagnostics, unit-aware repair tolerance reporting, sag/sag-ratio/angle/max-length controls, bounding-box-derived tessellation helpers, free-edge diagnostics, reusable existing mesh control, and retained patch / submesh risk warnings. | Open-shell grouping, unstitched-face handling, T-junction sewing, boundary-gap stitching, non-manifold edge cracking, tolerance-based overlapping-surface/z-fighting cleanup, non-orientable strip cracking, topology-only vertex connectivity with split render attributes, selectable face/normal orientation strategies, CAD-derived UV modes, targeted tessellation by material/metadata/curvature, and optional free-edge geometry output. |
+| Staging | Normal/tangent generation, box/unwrap/lightmap UV modes, UV copy/normalization, UV validation, UV island/distortion/packing diagnostics, material normalization, duplicate-material merge, and metadata-only atlas intent. | Unity-style UV0 tileable versus UV1 bake workflows with segmentation, sharp-edge seam and forbid-overlap UV policies, lines of interest, island merge/alignment, real repack/padding/share-map controls, material-library mapping, real atlas textures, AO/lightmap baking, and texture cleanup. |
+| Optimization | Mesh simplification, measured error reporting, sampled occlusion removal, exact instance reconstruction, scene merge/split utilities, draw-call breakdown reports, and UV-importance modes. | Global assembly target allocation with iterative memory thresholds, real geometric-error bounded simplification, AO/user-weighted decimation, standard/advanced occlusion backends, retopology/proxy mesh generation, symmetry-aware loose/precise instance reconstruction, duplicate image/material cleanup, and merge reports that quantify culling, memory, and file-size tradeoffs. |
+| LODs | LOD ratios, screen-coverage metadata, validation, skipped-part reporting, and glTF `MSFT_lod` metadata. | Occurrence-level LOD group authoring with preserved instance relationships, optimized LOD0 as master asset, far-LOD one-mesh/one-material baking, LOD-count memory/file-size tradeoff reports, switching-distance validation, and engine-specific runtime export profiles. |
 | Export | USD/USDZ, glTF/GLB, OBJ, STL, glTF quantization, meshopt, extension reporting, file-size budgets, and rejection of unsupported Draco/KTX2 requests. | Real Draco compression settings, KTX2/Basis texture output, texture resize and PNG/JPEG fallback controls, unused texture cleanup, baseline-versus-optimized size comparisons, Unity/glTFast-oriented profiles, and web/mobile/VR/XR budget presets backed by runtime measurements. |
 
 Function-level parity notes from the linked Unity pages:
@@ -143,11 +146,11 @@ Function-level parity notes from the linked Unity pages:
 | Unity reference | Fascat today | Gap to track |
 | --- | --- | --- |
 | Tessellate models | Sag, sag-ratio, angle, max-polygon-length, per-part overrides, and size-adaptive helpers are represented. | Add CAD-derived UV modes, optional free-edge geometry output, and material/metadata/curvature-driven tessellation profiles. |
-| Repair meshes | Duplicate and degenerate cleanup plus T-junction, boundary-gap, non-manifold, and orientation diagnostics are reported. | Implement true T-junction sewing, boundary stitching, non-manifold edge cracking, and explicit face/normal orientation strategies. |
-| Merge vertices | Standalone `merge_vertices` is exposed across Python, CLI, and TOML with normals, tangents, UV, and material-boundary protection plus before/after reports. | Add stronger cross-bucket tolerance merging and richer reports for skipped merges by protection reason. |
-| Delete degenerate polygons | Degenerate deletion exists inside mesh repair. | Expose a standalone degenerate-polygon cleanup operation with area/tolerance controls, selection support, and reportable no-op behavior. |
+| Repair meshes | Duplicate and degenerate cleanup plus standalone degenerate-polygon deletion, T-junction, boundary-gap, non-manifold, and orientation diagnostics are reported. | Implement true T-junction sewing, boundary stitching, non-manifold edge cracking, tolerance-based overlap/z-fighting cleanup, non-orientable strip cracking, and explicit face/normal orientation strategies. |
+| Merge vertices | Standalone `merge_vertices` is exposed across Python, CLI, and TOML with normals, tangents, UV, and material-boundary protection plus before/after reports. | Add topology-only connectivity merging that can preserve hard-edge, UV, and material seams as split render attributes; also add stronger cross-bucket tolerance merging and richer reports for skipped merges by protection reason. |
+| Delete degenerate polygons | Standalone `delete_degenerate_polygons` is exposed across Python, CLI, and TOML with area-threshold controls, selection support, no-op reports, unit-aware area reporting, and before/after counts. | Extend cleanup beyond zero-area triangles to tolerance-based overlapping or z-fighting polygons. |
 | Decimate to target | Target count, ratio, UV-importance modes, topology intent, RAM estimates, and measured-error reports exist. | Add real global target allocation, configurable iterative thresholds/pass reports, enforced geometric error bounds, and AO/user-weighted decimation. |
-| Unwrap UV | UV0/UV1 unwrap intent, solver method, iteration, tolerance, distortion, and packing diagnostics are represented. | Add destination-channel control, create-seams-from-lines-of-interest, seam graph metadata, island merge/alignment, and real repack/padding/share-map controls. |
+| Unwrap UV | UV0/UV1 unwrap intent, solver method, iteration, tolerance, distortion, and packing diagnostics are represented. | Add destination-channel control, sharp-edge seam and forbid-overlap policies, create-seams-from-lines-of-interest, seam graph metadata, island merge/alignment, and real repack/padding/share-map controls. |
 
 Second-pass gaps from the Unity references:
 
@@ -180,14 +183,25 @@ Second-pass gaps from the Unity references:
   cleanup or normal generation. Unity separates polygon orientation, normal
   orientation, and open-shell/unstitched-face handling; Fascat should report
   those decisions separately.
+- Model Unity's connectivity-oriented vertex merge more accurately. Unity can
+  merge same-position vertices with different render attributes to recreate
+  connectivity; Fascat currently avoids collapsing those seams by default. Add
+  split topology/render-attribute support or corner attributes so hard edges,
+  UV seams, and material boundaries survive while topology is still connected.
+- Extend repair beyond exact duplicate polygons. Unity repair targets
+  overlapping/z-fighting surfaces and can crack non-orientable strips before
+  orientation; Fascat should add tolerance-based overlap cleanup and optional
+  non-orientable strip cracking instead of only reporting those risks.
 - Track Unity's lines-of-interest UV workflow explicitly. Segmenting seams,
   optionally creating seams from LoI, unwrapping, merging, aligning, repacking,
   and normalizing should be modeled as distinct UV steps with per-channel
   metadata.
+- Track Unity's automatic UV mapping controls explicitly: sharp edges as seams
+  and forbidden overlap should be first-class UV policies, with report warnings
+  when the active backend cannot enforce them.
 - Expose Unity-style function-level repair steps where useful. `repair` can stay
-  the high-level default, but `delete_degenerate_polygons`, face orientation,
-  normal orientation, and patch cleanup still need standalone operations for
-  reproducible expert pipelines.
+  the high-level default, but face orientation, normal orientation, and patch
+  cleanup still need standalone operations for reproducible expert pipelines.
 - Add an export-aware merge-versus-instance advisor. Unity's export guidance
   favors preserving instances for file size even when merging can reduce draw
   calls, so Fascat should warn when a merge helps batching but hurts GLB size,
@@ -216,12 +230,14 @@ Parity gaps to track:
 3. CAD and mesh repair depth
    - Add an open-shell repair workflow: detect single open-shell parts, merge or group them before BREP healing, and keep separate warnings for unstitched faces.
    - Improve BREP healing beyond the current sewing/fix-edge path: sliver-face removal, duplicate face handling, tolerance unification, and visible report warnings for unsupported backend work.
-   - Mesh repair now deletes duplicate polygons and records before/after duplicate, degenerate, boundary-edge, and non-manifold metrics.
+   - Mesh repair now deletes duplicate polygons and records before/after duplicate, degenerate, boundary-edge, and non-manifold metrics. Standalone degenerate-polygon cleanup now exposes the degenerate deletion path as a reproducible operation with before/after no-op reports.
+   - Add tolerance-based overlapping-surface and z-fighting cleanup, not only exact duplicate-polygon deletion.
    - Extend mesh repair with true T-junction sewing, non-manifold edge cracking, and configurable face-orientation strategies for closed solids versus open shells.
    - Mesh repair now detects non-orientable strips before face orientation so Mobius-like topology is reported separately from ordinary flipped faces.
+   - Add optional cracking of non-orientable/Mobius-like strips before face orientation when a backend can split them safely.
    - Add explicit face-orientation and normal-orientation report steps with selectable strategies for exterior solids, single-sided open shells, unstitched-face groups, and preserved two-sided surfaces.
    - Add missing-normal generation controls for sharp-edge angle, area weighting, and override behavior.
-   - Standalone vertex merging now rebuilds connectivity without collapsing intentional material, normal, tangent, or UV seams by default. Remaining work: report skipped merge reasons and improve cross-bucket tolerance matching.
+   - Standalone vertex merging now rebuilds connectivity without collapsing intentional material, normal, tangent, or UV seams by default. Remaining work: support topology-only connectivity merging with split render attributes, report skipped merge reasons, and improve cross-bucket tolerance matching.
    - Mesh repair now records before/after T-junction, nearby boundary-gap, and flipped closed-component counts. It warns that sewing/stitching remains unavailable and warns when outward orientation is still not produced.
    - BREP healing and mesh repair now report unit-aware tolerance policy: effective source/local units, declared target units, meters-per-unit conversions, vertex-merge and degenerate-polygon cleanup status, and missing T-junction/non-manifold backend operations.
 
@@ -238,6 +254,7 @@ Parity gaps to track:
 5. UV staging
    - Extend existing box UVs into Unity-style AABB projection controls: local versus shared/global AABB, real-world UV scale or `uv3dSize`, destination channel, override policy, and unit reporting.
    - Add UV segmentation and seam planning, including sharp-edge seams, material-boundary seams, user-supplied seam curves, and lines of interest.
+   - Expose automatic UV mapping policy controls equivalent to Unity's `sharpToSeam` and `forbidOverlapping`, with per-channel report fields for requested and enforced behavior.
    - Add a complete UV workflow model: segment, unwrap, optionally merge islands, align tileable UV0 islands, repack UV1, normalize, validate overlaps, and record which steps ran per channel.
    - Add lines-of-interest seam controls equivalent to Unity's create-seams-from-LoI path, with persisted seam graph metadata and warnings when the backend falls back to existing UV islands.
    - Staging now warns when bake-domain UVs were only unwrapped and not repacked, because unwrap alone does not prove islands were packed into `[0,1]` with padding for lightmap, AO, or material baking.
@@ -264,7 +281,7 @@ Parity gaps to track:
 7. Optimization and draw-call reduction
    - Add acceleration structures, confidence metrics, and optional raster/GPU backends to the new sampled occlusion removal.
    - Expose standard versus advanced occlusion-removal parameters such as resolution, sphere count or ray direction set, adjacency depth, hemisphere-only evaluation, cavity preservation, and GPU/backend requirements.
-   - Add loose and precise instance reconstruction for similar, separately modeled parts.
+   - Add loose and precise instance reconstruction for similar, separately modeled parts, including configurable similarity thresholds and symmetry/mirror handling.
    - Merge and scene-batching reports now show draw-call savings, lost reusable instances, added merged batches, and export-advisor warnings when merging destroys repeated geometry.
    - Export-aware merge advisors now recommend preserving or reconstructing instances when file size, memory, or culling is more important than reducing draw calls.
    - Draw-call budget analysis now separates mesh count, referenced material count, submesh/material slots, instances, reused instances, and merged batches.
@@ -288,6 +305,7 @@ Parity gaps to track:
    - Preserve occurrence-level LOD chains and instance relationships across all LOD levels.
    - Add far-LOD generation that can merge to one mesh and one baked material for one-draw-call distant rendering.
    - Add LOD validation for screen coverage, monotonic triangle reduction, material simplification, switching distances, and export runtime behavior.
+   - Report the memory and export-size tradeoff of adding extra LOD levels so users can choose three to four useful levels instead of generating wasteful chains.
    - Add LOD generation reports that show whether each level reused instances, merged materials, baked textures, or changed culling granularity.
    - Non-mesh or untessellated selections are now skipped with part metadata, generated/skipped counts, and report warnings instead of quietly producing partial chains.
    - Add engine-specific LOD export metadata or profiles for Unity, Unreal, and standards-based glTF runtimes, including switching-distance validation.

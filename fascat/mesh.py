@@ -11,7 +11,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from fascat.metadata import Metadata
-from fascat.options import MergeVerticesOptions, RepairOptions
+from fascat.options import DeleteDegeneratePolygonsOptions, MergeVerticesOptions, RepairOptions
 
 FloatArray = NDArray[np.float64]
 IntArray = NDArray[np.int64]
@@ -414,6 +414,28 @@ class Mesh:
         areas = np.linalg.norm(np.cross(p1 - p0, p2 - p0), axis=1) * 0.5
         keep = np.flatnonzero(areas > area_epsilon)
         return self._filter_faces(keep).remove_unreferenced_vertices()
+
+    def delete_degenerate_polygons(self, options: DeleteDegeneratePolygonsOptions | None = None) -> Mesh:
+        opts = options or DeleteDegeneratePolygonsOptions()
+        before_vertex_count = self.vertex_count
+        before_triangle_count = self.triangle_count
+        before_degenerate_count = int(self.quality_metrics(area_epsilon=opts.area_epsilon)["degenerate_triangles"])
+        mesh = self.remove_degenerate_faces(opts.area_epsilon)
+        after_degenerate_count = int(mesh.quality_metrics(area_epsilon=opts.area_epsilon)["degenerate_triangles"])
+        mesh.metadata = {
+            **mesh.metadata,
+            "delete_degenerate_polygons_area_epsilon": f"{opts.area_epsilon:g}",
+            "delete_degenerate_polygons_vertices_before": str(before_vertex_count),
+            "delete_degenerate_polygons_vertices_after": str(mesh.vertex_count),
+            "delete_degenerate_polygons_vertices_removed": str(before_vertex_count - mesh.vertex_count),
+            "delete_degenerate_polygons_triangles_before": str(before_triangle_count),
+            "delete_degenerate_polygons_triangles_after": str(mesh.triangle_count),
+            "delete_degenerate_polygons_removed": str(before_triangle_count - mesh.triangle_count),
+            "delete_degenerate_polygons_before": str(before_degenerate_count),
+            "delete_degenerate_polygons_after": str(after_degenerate_count),
+        }
+        mesh.validate()
+        return mesh
 
     def quality_metrics(
         self,
