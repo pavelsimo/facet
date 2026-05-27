@@ -303,6 +303,7 @@ class Asset:
                 "vertex_merge": "enabled" if opts.merge_vertices else "disabled",
                 "degenerate_polygon_cleanup": "enabled" if opts.delete_degenerate else "disabled",
                 "t_junction_sewing": "not_implemented",
+                "boundary_gap_stitching": "not_implemented",
                 "non_manifold_edge_cracking": "not_implemented",
             },
         )
@@ -329,6 +330,12 @@ class Asset:
                         asset.report.add_warning(
                             f"part {part.id} has {remaining_t_junctions} T-junction(s) after mesh repair; "
                             "T-junction sewing is not implemented"
+                        )
+                    remaining_boundary_gaps = _metadata_int(part.mesh.metadata.get("repair_boundary_gaps_after"), 0)
+                    if remaining_boundary_gaps:
+                        asset.report.add_warning(
+                            f"part {part.id} has {remaining_boundary_gaps} boundary gap(s) after mesh repair; "
+                            "boundary gap stitching is not implemented"
                         )
                     part.fingerprint = part.mesh.fingerprint()
         step_warnings = asset.report.warnings[warning_count:]
@@ -964,6 +971,8 @@ def _repair_report_stats(asset: Asset) -> dict[str, int]:
     non_orientable_edges = 0
     t_junctions_before = 0
     t_junctions_after = 0
+    boundary_gaps_before = 0
+    boundary_gaps_after = 0
     for part in asset.parts.values():
         if part.mesh is None:
             continue
@@ -973,11 +982,16 @@ def _repair_report_stats(asset: Asset) -> dict[str, int]:
         )
         t_junctions_before += _metadata_int(part.mesh.metadata.get("repair_t_junctions_before"), 0)
         t_junctions_after += _metadata_int(part.mesh.metadata.get("repair_t_junctions_after"), 0)
+        boundary_gaps_before += _metadata_int(part.mesh.metadata.get("repair_boundary_gaps_before"), 0)
+        boundary_gaps_after += _metadata_int(part.mesh.metadata.get("repair_boundary_gaps_after"), 0)
     if non_orientable_edges:
         stats["repair_non_orientable_edges_before_orientation"] = non_orientable_edges
     if t_junctions_before or t_junctions_after:
         stats["repair_t_junctions_before"] = t_junctions_before
         stats["repair_t_junctions_after"] = t_junctions_after
+    if boundary_gaps_before or boundary_gaps_after:
+        stats["repair_boundary_gaps_before"] = boundary_gaps_before
+        stats["repair_boundary_gaps_after"] = boundary_gaps_after
     return stats
 
 

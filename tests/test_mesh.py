@@ -142,6 +142,29 @@ def test_repair_records_t_junction_counts() -> None:
     assert repaired.metadata["repair_t_junctions_after"] == "1"
 
 
+def test_repair_records_boundary_gap_counts() -> None:
+    mesh = Mesh(
+        points=np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [1.005, 0, 0],
+                [2, 0, 0],
+                [1.005, 1, 0],
+            ],
+            dtype=float,
+        ),
+        faces=np.array([[0, 1, 2], [3, 4, 5]], dtype=int),
+    )
+
+    repaired = mesh.repair(RepairOptions(tolerance=0.01, merge_vertices=False))
+
+    assert mesh.boundary_gap_count(tolerance=0.01) == 1
+    assert repaired.metadata["repair_boundary_gaps_before"] == "1"
+    assert repaired.metadata["repair_boundary_gaps_after"] == "1"
+
+
 def test_orientability_metrics_detect_mobius_like_strip() -> None:
     mesh = mobius_strip_mesh()
 

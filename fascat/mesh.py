@@ -204,8 +204,10 @@ class Mesh:
         mesh = mesh._drop_non_finite()
         mesh = mesh.remove_unreferenced_vertices()
         t_junction_tolerance = max(opts.tolerance, 1e-9)
+        boundary_gap_tolerance = max(opts.tolerance, 1e-9)
         before_metrics = mesh.quality_metrics(area_epsilon=opts.area_epsilon)
         before_t_junctions = mesh.t_junction_count(tolerance=t_junction_tolerance)
+        before_boundary_gaps = mesh.boundary_gap_count(tolerance=boundary_gap_tolerance)
         if opts.merge_vertices and opts.tolerance > 0.0:
             mesh = mesh.merge_close_vertices(opts.tolerance)
         mesh = mesh.remove_duplicate_faces()
@@ -222,6 +224,7 @@ class Mesh:
                 mesh = mesh.compute_normals()
         after_metrics = mesh.quality_metrics(area_epsilon=opts.area_epsilon)
         after_t_junctions = mesh.t_junction_count(tolerance=t_junction_tolerance)
+        after_boundary_gaps = mesh.boundary_gap_count(tolerance=boundary_gap_tolerance)
         mesh.metadata = {
             **mesh.metadata,
             "repair_duplicate_polygons_before": str(int(before_metrics["duplicate_polygons"])),
@@ -234,6 +237,8 @@ class Mesh:
             "repair_non_manifold_edges_after": str(int(after_metrics["non_manifold_edges"])),
             "repair_t_junctions_before": str(before_t_junctions),
             "repair_t_junctions_after": str(after_t_junctions),
+            "repair_boundary_gaps_before": str(before_boundary_gaps),
+            "repair_boundary_gaps_after": str(after_boundary_gaps),
             "repair_orientation_components_before_orientation": str(int(orientation_metrics["orientation_components"])),
             "repair_non_orientable_edges_before_orientation": str(int(orientation_metrics["non_orientable_edges"])),
         }
@@ -392,6 +397,39 @@ class Mesh:
                     continue
                 conflicts.add((min(start_index, end_index), max(start_index, end_index), candidate))
         return len(conflicts)
+
+    def boundary_gap_count(self, *, tolerance: float = 1e-9) -> int:
+        if self.triangle_count == 0 or self.vertex_count < 2:
+            return 0
+        distance_tolerance = max(float(tolerance), 1e-12)
+        boundary_edges = self._boundary_edges_set()
+        if not boundary_edges:
+            return 0
+        boundary_vertices = sorted({vertex for edge in boundary_edges for vertex in edge})
+        all_edges, _counts = self._undirected_edges_and_counts()
+        connected_edges = {(int(edge[0]), int(edge[1])) for edge in all_edges.astype(int).tolist()}
+        buckets: dict[tuple[int, int, int], list[int]] = {}
+        gaps: set[tuple[int, int]] = set()
+
+        def bucket_key(point: FloatArray) -> tuple[int, int, int]:
+            key = np.floor(point / distance_tolerance).astype(np.int64)
+            return (int(key[0]), int(key[1]), int(key[2]))
+
+        for vertex in boundary_vertices:
+            point = self.points[vertex]
+            key = bucket_key(point)
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    for dz in (-1, 0, 1):
+                        neighbor_key = (key[0] + dx, key[1] + dy, key[2] + dz)
+                        for other in buckets.get(neighbor_key, []):
+                            pair = (min(vertex, other), max(vertex, other))
+                            if pair in connected_edges:
+                                continue
+                            if float(np.linalg.norm(point - self.points[other])) <= distance_tolerance:
+                                gaps.add(pair)
+            buckets.setdefault(key, []).append(vertex)
+        return len(gaps)
 
     def orientability_metrics(self) -> dict[str, int]:
         if self.triangle_count == 0:
