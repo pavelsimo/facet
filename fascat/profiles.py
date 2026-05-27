@@ -38,7 +38,11 @@ def realtime_desktop(
         optimize=OptimizeOptions(target_triangles=max_triangles, simplify=True, optimize_buffers=True),
         lods=LODOptions(ratios=tuple(lod_ratios)) if lod_ratios else None,
         budget=PlatformBudget(
-            target_fps=60, max_triangles=max_triangles, max_vertices=max_triangles * 3, max_draw_calls=2_000
+            target_fps=60,
+            max_triangles=max_triangles,
+            max_vertices=max_triangles * 3,
+            max_vertices_per_mesh=65_535,
+            max_draw_calls=2_000,
         ),
     )
 
@@ -58,7 +62,11 @@ def realtime_web(
         optimize=OptimizeOptions(target_triangles=max_triangles, simplify=True, optimize_buffers=True),
         lods=LODOptions(ratios=tuple(lod_ratios)) if lod_ratios else None,
         budget=PlatformBudget(
-            target_fps=60, max_triangles=max_triangles, max_vertices=max_triangles * 3, max_draw_calls=500
+            target_fps=60,
+            max_triangles=max_triangles,
+            max_vertices=max_triangles * 3,
+            max_vertices_per_mesh=65_535,
+            max_draw_calls=500,
         ),
     )
 
@@ -78,7 +86,11 @@ def realtime_mobile(
         optimize=OptimizeOptions(target_triangles=max_triangles, simplify=True, optimize_buffers=True),
         lods=LODOptions(ratios=tuple(lod_ratios)) if lod_ratios else None,
         budget=PlatformBudget(
-            target_fps=60, max_triangles=max_triangles, max_vertices=max_triangles * 3, max_draw_calls=250
+            target_fps=60,
+            max_triangles=max_triangles,
+            max_vertices=max_triangles * 3,
+            max_vertices_per_mesh=65_535,
+            max_draw_calls=250,
         ),
     )
 
@@ -98,7 +110,11 @@ def virtual_reality(
         optimize=OptimizeOptions(target_triangles=max_triangles, simplify=True, optimize_buffers=True),
         lods=LODOptions(ratios=tuple(lod_ratios)) if lod_ratios else None,
         budget=PlatformBudget(
-            target_fps=90, max_triangles=max_triangles, max_vertices=max_triangles * 3, max_draw_calls=250
+            target_fps=90,
+            max_triangles=max_triangles,
+            max_vertices=max_triangles * 3,
+            max_vertices_per_mesh=65_535,
+            max_draw_calls=250,
         ),
     )
 

@@ -305,6 +305,19 @@ def _add_profile_budget_report(asset: Asset, profile: ConversionProfile) -> None
             warnings.append(
                 f"profile budget exceeded for {profile.name}: vertices {asset.vertex_count} > {budget.max_vertices}"
             )
+    if budget.max_vertices_per_mesh is not None:
+        mesh_vertex_counts = _mesh_vertex_counts(asset)
+        largest = max(mesh_vertex_counts, default=0)
+        over_count = sum(1 for vertex_count in mesh_vertex_counts if vertex_count > budget.max_vertices_per_mesh)
+        after["profile_max_vertices_per_mesh_budget"] = budget.max_vertices_per_mesh
+        after["profile_largest_mesh_vertices"] = largest
+        after["profile_meshes_over_vertex_budget"] = over_count
+        if over_count:
+            violations += 1
+            warnings.append(
+                f"profile budget exceeded for {profile.name}: {over_count} mesh(es) exceed "
+                f"{budget.max_vertices_per_mesh} vertices (largest {largest})"
+            )
     if budget.max_draw_calls is not None:
         after["profile_draw_call_budget"] = budget.max_draw_calls
         over = max(0, asset.draw_call_count - budget.max_draw_calls)
@@ -319,6 +332,16 @@ def _add_profile_budget_report(asset: Asset, profile: ConversionProfile) -> None
     for warning in warnings:
         asset.report.add_warning(warning)
     asset.report.add_step("profile_budget", options=options, before=before, after=after, warnings=warnings)
+
+
+def _mesh_vertex_counts(asset: Asset) -> list[int]:
+    counts: list[int] = []
+    for part in asset.parts.values():
+        if part.mesh is not None:
+            counts.append(part.mesh.vertex_count)
+        for lod_mesh in part.lod_meshes:
+            counts.append(lod_mesh.vertex_count)
+    return counts
 
 
 def _file_size_budget(
