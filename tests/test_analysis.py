@@ -95,6 +95,62 @@ def test_asset_analyze_reports_geometry_quality_and_visual_risks(tmp_path: Path)
     assert payload["parts"][1]["tiny"] is True
 
 
+def test_asset_analyze_reports_actual_triangle_self_intersections() -> None:
+    mesh = Mesh(
+        points=np.asarray(
+            [
+                [-1.0, -1.0, 0.0],
+                [1.0, -1.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, -0.5, -1.0],
+                [0.0, -0.5, 1.0],
+                [0.0, 0.5, 0.0],
+                [2.0, 2.0, 0.0],
+                [3.0, 2.0, 0.0],
+                [2.0, 3.0, 0.0],
+            ],
+            dtype=float,
+        ),
+        faces=np.asarray([[0, 1, 2], [3, 4, 5], [6, 7, 8]], dtype=int),
+    )
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="part_node", name="Part", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", mesh=mesh)},
+    )
+
+    report = asset.analyze(AnalyzeOptions(self_intersections=True))
+
+    assert report.summary["self_intersections"] == 1
+    assert report.summary["self_intersection_warnings"] == 1
+    assert report.parts[0]["self_intersections"] == 1
+
+
+def test_asset_analyze_does_not_count_aabb_only_self_intersection_candidates() -> None:
+    mesh = Mesh(
+        points=np.asarray(
+            [
+                [0.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [0.0, 2.0, 0.0],
+                [1.5, 1.8, -1.0],
+                [1.5, 1.8, 1.0],
+                [1.5, 3.0, 0.0],
+            ],
+            dtype=float,
+        ),
+        faces=np.asarray([[0, 1, 2], [3, 4, 5]], dtype=int),
+    )
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="part_node", name="Part", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", mesh=mesh)},
+    )
+
+    report = asset.analyze(AnalyzeOptions(self_intersections=True))
+
+    assert report.summary["self_intersections"] == 0
+    assert report.parts[0]["self_intersections"] == 0
+
+
 def test_analyze_output_reconstructs_embedded_gltf_quality(tmp_path: Path) -> None:
     asset = Asset(
         root=Node(id="root", name="root", children=[Node(id="triangle_node", name="Triangle", part_id="triangle")]),

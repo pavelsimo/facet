@@ -27,6 +27,7 @@ _GLTF_DTYPES: dict[int, np.dtype[Any]] = {
     5125: np.dtype("<u4"),
     5126: np.dtype("<f4"),
 }
+_INTERSECTION_EPSILON = 1e-9
 
 
 @dataclass
@@ -108,6 +109,7 @@ def analyze_asset(
         summary["open_boundaries"] = totals.open_boundaries
         summary["boundary_edges"] = totals.boundary_edges
     if opts.self_intersections or opts.visual_risk:
+        summary["self_intersections"] = totals.self_intersection_warnings
         summary["self_intersection_warnings"] = totals.self_intersection_warnings
     if opts.sliver_triangles or opts.visual_risk:
         summary["degenerate_triangles"] = totals.degenerate_triangles
@@ -251,13 +253,14 @@ def _mesh_quality_entry(
         values["tiny_part_diagonal_threshold"] = options.tiny_part_diagonal
 
     if include_self_intersections:
-        candidates, truncated = _self_intersection_candidate_count(mesh, options.max_self_intersection_pairs)
-        totals.self_intersection_warnings = candidates
-        values["self_intersection_warnings"] = candidates
+        intersections, truncated = _self_intersection_count(mesh, options.max_self_intersection_pairs)
+        totals.self_intersection_warnings = intersections
+        values["self_intersections"] = intersections
+        values["self_intersection_warnings"] = intersections
         if truncated:
             warnings.append(
                 f"self-intersection check for part {part.id} reached "
-                f"{options.max_self_intersection_pairs} triangle pairs; reported warnings are a lower bound"
+                f"{options.max_self_intersection_pairs} triangle pairs; reported intersections are a lower bound"
             )
 
     return _MeshQualityEntry(values=values, totals=totals, warnings=warnings)
@@ -304,14 +307,14 @@ def _open_boundary_count(mesh: Mesh) -> int:
     return count
 
 
-def _self_intersection_candidate_count(mesh: Mesh, max_pairs: int) -> tuple[int, bool]:
+def _self_intersection_count(mesh: Mesh, max_pairs: int) -> tuple[int, bool]:
     if mesh.triangle_count < 2:
         return 0, False
     triangles = mesh.points[mesh.faces]
     mins = triangles.min(axis=1)
     maxs = triangles.max(axis=1)
     face_vertices = [set(face) for face in mesh.faces.astype(int).tolist()]
-    warnings = 0
+    intersections = 0
     checked = 0
     for left in range(mesh.triangle_count - 1):
         for right in range(left + 1, mesh.triangle_count):
@@ -319,10 +322,119 @@ def _self_intersection_candidate_count(mesh: Mesh, max_pairs: int) -> tuple[int,
                 continue
             checked += 1
             if checked > max_pairs:
-                return warnings, True
-            if bool(np.all(maxs[left] >= mins[right]) and np.all(maxs[right] >= mins[left])):
-                warnings += 1
-    return warnings, False
+                return intersections, True
+            if not bool(np.all(maxs[left] >= mins[right]) and np.all(maxs[right] >= mins[left])):
+                continue
+            if _triangles_intersect(triangles[left], triangles[right]):
+                intersections += 1
+    return intersections, False
+
+
+def _triangles_intersect(left: FloatArray, right: FloatArray) -> bool:
+    if _triangle_area(left) <= _INTERSECTION_EPSILON or _triangle_area(right) <= _INTERSECTION_EPSILON:
+        return False
+    if _triangles_coplanar(left, right):
+        return _coplanar_triangles_intersect(left, right)
+    for start, end in _triangle_edges(left):
+        if _segment_intersects_triangle(start, end, right):
+            return True
+    return any(_segment_intersects_triangle(start, end, left) for start, end in _triangle_edges(right))
+
+
+def _triangle_area(triangle: FloatArray) -> float:
+    return float(np.linalg.norm(np.cross(triangle[1] - triangle[0], triangle[2] - triangle[0])) * 0.5)
+
+
+def _triangles_coplanar(left: FloatArray, right: FloatArray) -> bool:
+    normal = np.cross(left[1] - left[0], left[2] - left[0])
+    length = float(np.linalg.norm(normal))
+    if length <= _INTERSECTION_EPSILON:
+        return False
+    distances = (right - left[0]) @ (normal / length)
+    return bool(np.all(np.abs(distances) <= _INTERSECTION_EPSILON))
+
+
+def _triangle_edges(triangle: FloatArray) -> tuple[tuple[FloatArray, FloatArray], ...]:
+    return ((triangle[0], triangle[1]), (triangle[1], triangle[2]), (triangle[2], triangle[0]))
+
+
+def _segment_intersects_triangle(start: FloatArray, end: FloatArray, triangle: FloatArray) -> bool:
+    direction = end - start
+    edge1 = triangle[1] - triangle[0]
+    edge2 = triangle[2] - triangle[0]
+    pvec = np.cross(direction, edge2)
+    determinant = float(np.dot(edge1, pvec))
+    if abs(determinant) <= _INTERSECTION_EPSILON:
+        return False
+    inverse = 1.0 / determinant
+    tvec = start - triangle[0]
+    u = float(np.dot(tvec, pvec)) * inverse
+    if u < -_INTERSECTION_EPSILON or u > 1.0 + _INTERSECTION_EPSILON:
+        return False
+    qvec = np.cross(tvec, edge1)
+    v = float(np.dot(direction, qvec)) * inverse
+    if v < -_INTERSECTION_EPSILON or u + v > 1.0 + _INTERSECTION_EPSILON:
+        return False
+    t = float(np.dot(edge2, qvec)) * inverse
+    return -_INTERSECTION_EPSILON <= t <= 1.0 + _INTERSECTION_EPSILON
+
+
+def _coplanar_triangles_intersect(left: FloatArray, right: FloatArray) -> bool:
+    normal = np.cross(left[1] - left[0], left[2] - left[0])
+    axis = int(np.argmax(np.abs(normal)))
+    left_2d = np.delete(left, axis, axis=1)
+    right_2d = np.delete(right, axis, axis=1)
+    for left_start, left_end in _triangle_edges_2d(left_2d):
+        for right_start, right_end in _triangle_edges_2d(right_2d):
+            if _segments_intersect_2d(left_start, left_end, right_start, right_end):
+                return True
+    return _point_in_triangle_2d(left_2d[0], right_2d) or _point_in_triangle_2d(right_2d[0], left_2d)
+
+
+def _triangle_edges_2d(triangle: NDArray[np.float64]) -> tuple[tuple[NDArray[np.float64], NDArray[np.float64]], ...]:
+    return ((triangle[0], triangle[1]), (triangle[1], triangle[2]), (triangle[2], triangle[0]))
+
+
+def _segments_intersect_2d(
+    left_start: NDArray[np.float64],
+    left_end: NDArray[np.float64],
+    right_start: NDArray[np.float64],
+    right_end: NDArray[np.float64],
+) -> bool:
+    o1 = _orientation_2d(left_start, left_end, right_start)
+    o2 = _orientation_2d(left_start, left_end, right_end)
+    o3 = _orientation_2d(right_start, right_end, left_start)
+    o4 = _orientation_2d(right_start, right_end, left_end)
+    if o1 * o2 < -_INTERSECTION_EPSILON and o3 * o4 < -_INTERSECTION_EPSILON:
+        return True
+    return (
+        (abs(o1) <= _INTERSECTION_EPSILON and _point_on_segment_2d(right_start, left_start, left_end))
+        or (abs(o2) <= _INTERSECTION_EPSILON and _point_on_segment_2d(right_end, left_start, left_end))
+        or (abs(o3) <= _INTERSECTION_EPSILON and _point_on_segment_2d(left_start, right_start, right_end))
+        or (abs(o4) <= _INTERSECTION_EPSILON and _point_on_segment_2d(left_end, right_start, right_end))
+    )
+
+
+def _orientation_2d(a: NDArray[np.float64], b: NDArray[np.float64], c: NDArray[np.float64]) -> float:
+    return float((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
+
+
+def _point_on_segment_2d(point: NDArray[np.float64], start: NDArray[np.float64], end: NDArray[np.float64]) -> bool:
+    return bool(
+        min(start[0], end[0]) - _INTERSECTION_EPSILON <= point[0] <= max(start[0], end[0]) + _INTERSECTION_EPSILON
+        and min(start[1], end[1]) - _INTERSECTION_EPSILON <= point[1] <= max(start[1], end[1]) + _INTERSECTION_EPSILON
+    )
+
+
+def _point_in_triangle_2d(point: NDArray[np.float64], triangle: NDArray[np.float64]) -> bool:
+    orientations = [
+        _orientation_2d(triangle[0], triangle[1], point),
+        _orientation_2d(triangle[1], triangle[2], point),
+        _orientation_2d(triangle[2], triangle[0], point),
+    ]
+    has_negative = any(value < -_INTERSECTION_EPSILON for value in orientations)
+    has_positive = any(value > _INTERSECTION_EPSILON for value in orientations)
+    return not (has_negative and has_positive)
 
 
 def _visual_risk_warnings(asset: Asset, totals: _QualityTotals) -> list[str]:
@@ -338,7 +450,7 @@ def _visual_risk_warnings(asset: Asset, totals: _QualityTotals) -> list[str]:
     if totals.sliver_triangles:
         warnings.append(f"sliver triangles may produce shading and simplification artifacts: {totals.sliver_triangles}")
     if totals.self_intersection_warnings:
-        warnings.append(f"self-intersection candidates need visual inspection: {totals.self_intersection_warnings}")
+        warnings.append(f"self-intersections need visual inspection: {totals.self_intersection_warnings}")
     if totals.tiny_parts:
         warnings.append(f"tiny parts may disappear after optimization or LOD generation: {totals.tiny_parts}")
 

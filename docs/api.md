@@ -812,7 +812,7 @@ print(report.summary)
 report.write_json("quality-report.json")
 ```
 
-The analysis report includes per-part topology counts, degenerate and sliver triangle stats, tiny-part stats, material count, draw-call estimate, and visual-risk warnings derived from mesh quality and before/after pipeline report steps.
+The analysis report includes per-part topology counts, actual triangle self-intersection counts, degenerate and sliver triangle stats, tiny-part stats, material count, draw-call estimate, and visual-risk warnings derived from mesh quality and before/after pipeline report steps.
 
 Analysis parameters:
 
@@ -820,7 +820,7 @@ Analysis parameters:
 |-----------|---------|
 | `non_manifold_edges` | Count edges shared by more than two triangles. |
 | `open_boundaries` | Count boundary loops and boundary edges. |
-| `self_intersections` | Report candidate self-intersection risks. |
+| `self_intersections` | Run bounded triangle-triangle intersection checks and report detected self-intersections. |
 | `sliver_triangles` | Report degenerate and high-aspect-ratio triangles. |
 | `tiny_parts` | Report parts below the configured diagonal threshold. |
 | `draw_call_estimate` | Include material count and estimated draw calls. |
@@ -828,7 +828,7 @@ Analysis parameters:
 | `sliver_aspect_ratio` | Aspect-ratio threshold used to classify sliver triangles. |
 | `degenerate_area_epsilon` | Triangle area threshold used to classify degenerates. |
 | `tiny_part_diagonal` | Bounding-box diagonal threshold used to classify tiny parts. |
-| `max_self_intersection_pairs` | Maximum candidate pairs checked during self-intersection risk analysis. |
+| `max_self_intersection_pairs` | Maximum non-adjacent triangle pairs to check before reporting a lower-bound result. |
 
 ## Validation
 
