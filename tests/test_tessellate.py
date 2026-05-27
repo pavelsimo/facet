@@ -197,7 +197,7 @@ def test_tessellation_keep_brep_controls_source_shape_retention(monkeypatch) -> 
 
     def fake_tessellate_shape(shape: object, _options: Tessellation, **_kwargs: object) -> Mesh:
         calls.append(shape)
-        return triangle_mesh()
+        return triangle_mesh().compute_normals()
 
     monkeypatch.setattr(tessellate_module, "tessellate_shape", fake_tessellate_shape)
 
@@ -211,6 +211,41 @@ def test_tessellation_keep_brep_controls_source_shape_retention(monkeypatch) -> 
     assert dropped.parts["part"].metadata["source_shape_retained"] == "false"
     assert kept.parts["part"].metadata["brep_patch_cleanup"] == "retained"
     assert kept.parts["part"].metadata["source_shape_retained"] == "true"
+    dropped_sources = json.loads(str(dropped.parts["part"].metadata["tessellation_attribute_sources"]))
+    kept_sources = json.loads(str(kept.parts["part"].metadata["tessellation_attribute_sources"]))
+    assert dropped_sources["positions"] == "tessellation"
+    assert dropped_sources["normals"] == "tessellation"
+    assert dropped_sources["uvs"] == {"status": "not_generated_by_tessellation"}
+    assert dropped_sources["brep_patches"] == "deleted"
+    assert kept_sources["brep_patches"] == "retained"
+
+
+def test_tessellation_attribute_sources_record_reused_meshes() -> None:
+    mesh = triangle_mesh().compute_normals()
+    mesh.uvs[0] = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]], dtype=float)
+    mesh.face_groups = {"imported_face": np.array([0], dtype=int)}
+    root = Node(id="root", name="root", children=[Node(id="node", name="Part", part_id="part")])
+    asset = Asset(
+        root=root,
+        parts={"part": Part(id="part", name="Part", mesh=mesh, source_shape=object())},
+    )
+
+    tessellated = asset.tessellate(Tessellation(free_edge_report=True))
+    part = tessellated.parts["part"]
+    sources = json.loads(str(part.metadata["tessellation_attribute_sources"]))
+
+    assert sources == {
+        "brep_patches": "unchanged_existing_mesh_reuse",
+        "face_groups": "imported_mesh",
+        "free_edges": "diagnostic_only",
+        "normals": "imported_mesh",
+        "positions": "imported_mesh",
+        "tangents": "missing",
+        "triangles": "imported_mesh",
+        "uvs": {"0": "imported_mesh"},
+    }
+    assert part.mesh is not None
+    assert json.loads(str(part.mesh.metadata["tessellation_attribute_sources"])) == sources
 
 
 def test_tessellation_warns_about_retained_patch_and_submesh_risk(monkeypatch) -> None:  # type: ignore[no-untyped-def]

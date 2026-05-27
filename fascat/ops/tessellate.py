@@ -24,6 +24,7 @@ def tessellate_asset(asset: Asset, options: Tessellation, *, selected_part_ids: 
             continue
         part_options = _options_for_part(options, part)
         if part.mesh is not None and part_options.reuse_existing_meshes:
+            _record_tessellation_attribute_sources(result, part, part_options, geometry_source="imported_mesh")
             _record_tessellation_diagnostics(result, part, part_options)
             continue
         if part.source_shape is None:
@@ -55,6 +56,7 @@ def tessellate_asset(asset: Asset, options: Tessellation, *, selected_part_ids: 
         else:
             part.mesh = cached_mesh.copy()
         part.fingerprint = part.mesh.fingerprint()
+        _record_tessellation_attribute_sources(result, part, part_options, geometry_source="tessellation")
         _record_tessellation_diagnostics(result, part, part_options)
         _record_brep_patch_cleanup(result, part, part_options)
         if not part_options.keep_brep:
@@ -223,6 +225,68 @@ def _record_tessellation_diagnostics(asset: Asset, part: Part, options: Tessella
         _store_free_edge_report(asset, part, metrics)
     if options.max_polygon_length is not None:
         _warn_long_polygons(asset, part, options, metrics)
+
+
+def _record_tessellation_attribute_sources(
+    asset: Asset,
+    part: Part,
+    options: Tessellation,
+    *,
+    geometry_source: str,
+) -> None:
+    mesh = part.mesh
+    if mesh is None:
+        return
+    sources: dict[str, object] = {
+        "positions": geometry_source,
+        "triangles": geometry_source,
+        "normals": _normal_attribute_source(mesh, options, geometry_source),
+        "tangents": _tangent_attribute_source(mesh, geometry_source),
+        "uvs": _uv_attribute_sources(mesh, geometry_source),
+        "face_groups": _face_group_attribute_source(mesh, geometry_source),
+        "free_edges": "diagnostic_only" if options.free_edge_report else "not_requested",
+        "brep_patches": _brep_patch_attribute_source(part, options, geometry_source),
+    }
+    encoded = json.dumps(sources, sort_keys=True)
+    part.metadata["tessellation_attribute_sources"] = encoded
+    mesh.metadata["tessellation_attribute_sources"] = encoded
+
+
+def _normal_attribute_source(mesh: Mesh, options: Tessellation, geometry_source: str) -> str:
+    if geometry_source == "tessellation":
+        if options.create_normals and mesh.normals is not None:
+            return "tessellation"
+        if not options.create_normals:
+            return "disabled"
+        return "missing"
+    return "imported_mesh" if mesh.normals is not None else "missing"
+
+
+def _tangent_attribute_source(mesh: Mesh, geometry_source: str) -> str:
+    if mesh.tangents is not None:
+        return geometry_source
+    return "not_generated_by_tessellation" if geometry_source == "tessellation" else "missing"
+
+
+def _uv_attribute_sources(mesh: Mesh, geometry_source: str) -> dict[str, str]:
+    if not mesh.uvs:
+        return {"status": "not_generated_by_tessellation" if geometry_source == "tessellation" else "missing"}
+    source = "tessellation" if geometry_source == "tessellation" else "imported_mesh"
+    return {str(channel): source for channel in sorted(mesh.uvs)}
+
+
+def _face_group_attribute_source(mesh: Mesh, geometry_source: str) -> str:
+    if not mesh.face_groups:
+        return "missing"
+    return "cad_face_groups" if geometry_source == "tessellation" else "imported_mesh"
+
+
+def _brep_patch_attribute_source(part: Part, options: Tessellation, geometry_source: str) -> str:
+    if part.source_shape is None:
+        return "not_available"
+    if geometry_source == "imported_mesh":
+        return "unchanged_existing_mesh_reuse"
+    return "retained" if options.keep_brep else "deleted"
 
 
 def _store_quality_report(part: Part, options: Tessellation) -> dict[str, int | float] | None:
