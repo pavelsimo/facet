@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -247,6 +247,7 @@ def convert(
         )
         if progress is not None:
             progress("validate", asset.stats())
+    _add_workflow_summary_report(asset, output_format, write_options)
     _add_profile_budget_report(asset, selected)
     asset.report.finish(_report_stats(asset))
     return asset
@@ -378,6 +379,212 @@ def _add_profile_budget_report(asset: Asset, profile: ConversionProfile) -> None
     for warning in warnings:
         asset.report.add_warning(warning)
     asset.report.add_step("profile_budget", options=options, before=before, after=after, warnings=warnings)
+
+
+def _add_workflow_summary_report(asset: Asset, output_format: ExportFormat, write_options: dict[str, object]) -> None:
+    stages = _workflow_summary_stages(asset, output_format, write_options)
+    before = _report_stats(asset)
+    after = dict(before)
+    after["workflow_stages_total"] = len(stages)
+    for status in ("run", "skipped", "blocked"):
+        after[f"workflow_stages_{status}"] = sum(1 for stage in stages if stage["status"] == status)
+    for level in ("exact", "approximate", "metadata_only"):
+        after[f"workflow_stages_{level}"] = sum(1 for stage in stages if stage["level"] == level)
+    asset.report.add_step(
+        "workflow_summary",
+        options={"style": "unity_asset_transformer", "stages": stages},
+        before=before,
+        after=after,
+    )
+
+
+def _workflow_summary_stages(
+    asset: Asset,
+    output_format: ExportFormat,
+    write_options: dict[str, object],
+) -> list[dict[str, str]]:
+    steps = {step.name: step for step in asset.report.steps}
+    stages: list[dict[str, str]] = []
+
+    def add(stage: str, status: str, level: str, operation: str, message: str) -> None:
+        stages.append(
+            {
+                "stage": stage,
+                "status": status,
+                "level": level,
+                "operation": operation,
+                "message": message,
+            }
+        )
+
+    add(
+        "import",
+        "run" if "import" in steps else "skipped",
+        "exact" if "import" in steps else "not_applicable",
+        "import",
+        "STEP hierarchy, metadata, materials, and BREP handles were read when available"
+        if "import" in steps
+        else "input import did not run in this report",
+    )
+
+    cleanup_ops = [name for name in ("heal_brep", "repair") if name in steps]
+    add(
+        "import_cleanup",
+        "run" if cleanup_ops else "skipped",
+        _workflow_level_for_steps(steps, cleanup_ops),
+        ",".join(cleanup_ops) if cleanup_ops else "heal_brep,repair",
+        "BREP or mesh cleanup ran before staging" if cleanup_ops else "no BREP or mesh cleanup step ran",
+    )
+
+    add(
+        "tessellation",
+        "run" if "tessellate" in steps else "skipped",
+        "exact" if "tessellate" in steps else "not_applicable",
+        "tessellate",
+        "BREP tessellation ran" if "tessellate" in steps else "no tessellation step ran",
+    )
+
+    stage_step = steps.get("stage")
+    add(
+        "orientation",
+        "run" if stage_step is not None else "skipped",
+        "exact" if stage_step is not None else "not_applicable",
+        "stage",
+        "staging handled materials, normals, tangents, or orientation-sensitive attributes"
+        if stage_step is not None
+        else "no staging step ran",
+    )
+
+    uv_status = stage_step is not None and _stage_step_prepares_uvs(stage_step.options)
+    add(
+        "uv_preparation",
+        "run" if uv_status else "skipped",
+        _uv_preparation_level(stage_step.options) if uv_status and stage_step is not None else "not_applicable",
+        "stage",
+        "staging prepared UV channels or atlas metadata" if uv_status else "no UV preparation was requested",
+    )
+
+    add(
+        "material_baking",
+        "run" if "bake_materials" in steps else "skipped",
+        "approximate" if "bake_materials" in steps else "not_applicable",
+        "bake_materials",
+        "material baking emitted constant embedded texture maps"
+        if "bake_materials" in steps
+        else "material baking was not requested",
+    )
+
+    optimization_ops = [
+        name
+        for name in (
+            "merge",
+            "replace",
+            "optimize_scene",
+            "remove_holes",
+            "remove_occluded",
+            "decimate",
+            "optimize",
+        )
+        if name in steps
+    ]
+    add(
+        "optimization",
+        "run" if optimization_ops else "skipped",
+        _workflow_level_for_steps(steps, optimization_ops),
+        ",".join(optimization_ops) if optimization_ops else "optimize",
+        "LOD0 optimization or draw-call reduction ran" if optimization_ops else "no optimization step ran",
+    )
+
+    lod_ops = [name for name in ("run_lod_generators", "lods") if name in steps]
+    add(
+        "lod_generation",
+        "run" if lod_ops else "skipped",
+        _workflow_level_for_steps(steps, lod_ops),
+        ",".join(lod_ops) if lod_ops else "lods",
+        "LOD meshes were generated" if lod_ops else "LOD generation was not requested",
+    )
+
+    compression_ops = _export_compression_ops(output_format, write_options)
+    add(
+        "export_compression",
+        "run" if compression_ops else "skipped",
+        "exact" if compression_ops else "not_applicable",
+        ",".join(compression_ops) if compression_ops else "export",
+        "runtime export compression or quantization was requested"
+        if compression_ops
+        else "runtime export compression was not requested",
+    )
+
+    add(
+        "export",
+        "run" if "write" in steps else "skipped",
+        "exact" if "write" in steps else "not_applicable",
+        "write",
+        f"{output_format} output was written" if "write" in steps else "output write did not run",
+    )
+
+    return stages
+
+
+def _workflow_level_for_steps(steps: Mapping[str, object], names: list[str]) -> str:
+    if not names:
+        return "not_applicable"
+    if any(_workflow_step_level(steps[name]) == "approximate" for name in names):
+        return "approximate"
+    if any(_workflow_step_level(steps[name]) == "metadata_only" for name in names):
+        return "metadata_only"
+    return "exact"
+
+
+def _workflow_step_level(step: object) -> str:
+    name = getattr(step, "name", "")
+    options = getattr(step, "options", {})
+    warnings = getattr(step, "warnings", [])
+    if name in {"bake_materials", "remove_holes", "remove_occluded"}:
+        return "approximate"
+    if name == "heal_brep" and warnings:
+        return "approximate"
+    if name == "decimate" and isinstance(options, dict) and options.get("criterion") == "quality":
+        return "approximate"
+    if name == "stage" and isinstance(options, dict) and _uv_preparation_level(options) == "metadata_only":
+        return "metadata_only"
+    return "exact"
+
+
+def _stage_step_prepares_uvs(options: dict[str, object]) -> bool:
+    atlas = options.get("atlas")
+    unwrap = options.get("unwrap")
+    return (
+        options.get("uv0") != "none"
+        or options.get("uv1") not in {None, "none"}
+        or bool(options.get("normalize_uvs"))
+        or (isinstance(atlas, dict) and bool(atlas.get("enabled")))
+        or (
+            isinstance(unwrap, dict)
+            and any(
+                unwrap.get(key) not in {None, "default"}
+                for key in ("texel_density", "max_stretch", "method", "iterations", "tolerance")
+            )
+        )
+    )
+
+
+def _uv_preparation_level(options: dict[str, object]) -> str:
+    atlas = options.get("atlas")
+    if isinstance(atlas, dict) and bool(atlas.get("enabled")):
+        return "metadata_only"
+    return "exact"
+
+
+def _export_compression_ops(output_format: ExportFormat, write_options: dict[str, object]) -> list[str]:
+    if output_format != "gltf":
+        return []
+    result: list[str] = []
+    if bool(write_options.get("quantize")):
+        result.append("KHR_mesh_quantization")
+    if bool(write_options.get("meshopt")):
+        result.append("EXT_meshopt_compression")
+    return result
 
 
 def _mesh_vertex_counts(asset: Asset) -> list[int]:

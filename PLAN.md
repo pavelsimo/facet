@@ -80,8 +80,8 @@ Parity gaps to track:
 1. Workflow validation
    - Pipeline files now expose Unity-style ordering advisories through `PipelineSpec.advisories()`, dry-run `pipeline_advisories`, and conversion report warnings.
    - The advisor warns when a pipeline decimates before repair, computes tangents before UV0, bakes AO without UV1, or generates LODs before LOD0 optimization. Compression backend requests are still rejected by the CLI/options layer until real encoders exist.
-   - Add report summaries that show which Unity-inspired preparation stages were run, skipped, approximated, or blocked by missing optional backends, including import cleanup, orientation, UV preparation, material baking, LOD generation, and export compression.
-   - Add a parity checklist report that maps a finished conversion to the Unity-style import, repair, tessellate, stage, optimize, LOD, and export stages, with missing prerequisites called out before expensive operations run.
+   - Conversion reports now include a `workflow_summary` step that maps Unity-inspired preparation stages to run/skipped status and exact, approximate, or metadata-only levels, including import cleanup, orientation, UV preparation, material baking, LOD generation, export compression, and export.
+   - Remaining work: add a preflight parity checklist before expensive operations run, with missing prerequisites and missing optional backends called out before conversion starts.
 
 2. Import controls
    - Add a supported-format parity matrix. Unity's baseline covers many CAD and mesh formats; Fascat currently centers on STEP, so non-STEP CAD, mesh, and multi-format assembly imports need an explicit in-scope or out-of-scope decision.

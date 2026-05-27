@@ -334,6 +334,7 @@ mode = "bounding_box"
         "replace",
         "write",
         "validate",
+        "workflow_summary",
         "profile_budget",
     ]
     assert steps["replace"].options["where"]["criteria"] == {"part_id": ["part"], "max_triangles": 12}
@@ -490,6 +491,36 @@ def test_pipeline_advisories_are_added_to_convert_report(monkeypatch, tmp_path: 
 
     assert "decimation runs before mesh repair" in converted.report.warnings[0]
     assert captured["asset"].report.warnings == converted.report.warnings
+
+
+def test_convert_report_includes_workflow_summary(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    import fascat.pipeline as pipeline
+
+    monkeypatch.setattr(pipeline, "read_step", lambda _path: _triangle_asset())
+    monkeypatch.setattr(pipeline, "_write_usd", lambda _asset, _path, *, debug=False, options=None: None)
+
+    converted = convert(
+        "input.step",
+        tmp_path / "output.usdc",
+        profile=_test_profile(),
+        stage=StageOptions(uv0="box", uv1=None),
+        bake_materials=BakeMaterialOptions(force_uv_generation=True),
+        lods=LODOptions((0.5,)),
+        validate_output=False,
+    )
+    summary_step = converted.report.steps[-1]
+    stages = {item["stage"]: item for item in summary_step.options["stages"]}  # type: ignore[index]
+
+    assert summary_step.name == "workflow_summary"
+    assert summary_step.options["style"] == "unity_asset_transformer"
+    assert summary_step.after["workflow_stages_total"] == 10
+    assert summary_step.after["workflow_stages_run"] == 7
+    assert summary_step.after["workflow_stages_skipped"] == 3
+    assert summary_step.after["workflow_stages_approximate"] == 1
+    assert stages["uv_preparation"]["status"] == "run"
+    assert stages["material_baking"]["level"] == "approximate"
+    assert stages["lod_generation"]["status"] == "run"
+    assert stages["export_compression"]["status"] == "skipped"
 
 
 def test_pipeline_rejects_incompatible_step_options_with_line(tmp_path: Path) -> None:
@@ -735,7 +766,8 @@ def test_convert_report_finishes_when_validation_is_disabled(monkeypatch, tmp_pa
         validate_output=False,
     )
 
-    assert converted.report.steps[-1].name == "write"
+    assert converted.report.steps[-1].name == "workflow_summary"
+    assert converted.report.steps[-2].name == "write"
     assert converted.report.finished_at is not None
     assert converted.report.output_stats == converted.stats()
 

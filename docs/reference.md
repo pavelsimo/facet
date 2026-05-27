@@ -25,7 +25,7 @@ fascat inspect input.step --json
 
 `-h` / `--help` and `-V` / `--version` are invocation-wide controls. They work before or after subcommands and ignore other arguments.
 
-Dry-run JSON for `convert` includes `operation_diagnostics`, a list of planned operations with `level` set to `exact`, `approximate`, or `metadata_only`. When `--pipeline` is used it also includes `pipeline_advisories`, warning about ordering issues such as decimation before repair, tangents without UV0, AO baking without UV1, and LOD generation before LOD0 optimization.
+Dry-run JSON for `convert` includes `operation_diagnostics`, a list of planned operations with `level` set to `exact`, `approximate`, or `metadata_only`. When `--pipeline` is used it also includes `pipeline_advisories`, warning about ordering issues such as decimation before repair, tangents without UV0, AO baking without UV1, and LOD generation before LOD0 optimization. Conversion reports include a `workflow_summary` step that maps Unity-inspired preparation stages to run/skipped status and exact, approximate, or metadata-only levels.
 
 ## Commands
 
@@ -264,8 +264,9 @@ such as invalid numeric ranges, missing `external_path`, conflicting `where` /
 ## Unity-inspired capability matrix
 
 This matrix maps Unity Asset Transformer-style CAD-to-runtime capabilities to the
-current Fascat behavior. Use dry-run `operation_diagnostics` and report step
-warnings to distinguish exact work from fallbacks.
+current Fascat behavior. Use dry-run `operation_diagnostics`, report
+`workflow_summary`, and report step warnings to distinguish exact work from
+fallbacks.
 
 | Capability | Fascat status | Report or diagnostic | Next step |
 |------------|---------------|----------------------|-----------|
