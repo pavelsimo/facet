@@ -119,14 +119,26 @@ def from_mapping(
     merged_budget.update(budget_values)
     if "max_triangles" in budget_values and "max_vertices" not in budget_values:
         merged_budget["max_vertices"] = int(cast(Any, budget_values["max_triangles"])) * 3
+    budget = PlatformBudget(**cast(Any, merged_budget))
+    optimize = base_profile.optimize
+    if optimize is not None and budget.max_triangles is not None:
+        optimize = OptimizeOptions(
+            **cast(
+                Any,
+                {
+                    **optimize.to_dict(),
+                    "target_triangles": budget.max_triangles,
+                },
+            )
+        )
     return ConversionProfile(
         name=name,
         tessellation=base_profile.tessellation,
         repair=base_profile.repair,
         stage=base_profile.stage,
-        optimize=base_profile.optimize,
+        optimize=optimize,
         lods=base_profile.lods,
-        budget=PlatformBudget(**cast(Any, merged_budget)),
+        budget=budget,
     )
 
 

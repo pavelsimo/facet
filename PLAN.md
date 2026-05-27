@@ -92,6 +92,8 @@ that are currently conservative approximations.
 - Custom target-device profile files now load TOML/JSON budget overlays on a
   built-in base profile and surface the resolved budget through Python, CLI
   dry-run output, and conversion report budget checks.
+- Custom target-device triangle budgets now seed the profile optimization target
+  and derive a matching vertex budget when one is not provided.
 
 ## Unity Asset Transformer Parity
 
@@ -282,7 +284,7 @@ Parity gaps to track:
    - Profile budgets now include explicit Unity reference ranges for each broad profile so users can see how Fascat's stricter defaults compare with Unity's desktop, mobile, VR, and WebGL guideline ranges.
    - Augmented-reality and mixed-reality profiles now model stricter AR/XR device caps; remaining work is custom target-device overrides beyond built-in profiles.
    - Custom target-device profiles can now be loaded from TOML/JSON as budget overlays and surfaced in reports with resolved FPS, triangle, vertex, draw-call, texture, and load-time caps. Remaining work: add compression-support and runtime-extension caps.
-   - Use the selected platform budget to seed decimation, LOD, texture-resize, and export-compression defaults instead of only warning after conversion.
+   - Custom target-device triangle budgets now seed profile optimization targets instead of only warning after conversion. Remaining work: use selected platform budgets to seed explicit decimation defaults, LOD choices, texture-resize choices, and export-compression defaults.
    - The platform-budget checklist is complete at diagnostic-report level; future work is measured engine/runtime load profiling.
 
 ## Near-Term Polish

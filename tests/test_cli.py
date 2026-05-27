@@ -322,6 +322,7 @@ max_texture_resolution = 512
     assert payload["profile_options"]["budget"]["max_vertices"] == 126_000
     assert payload["profile_options"]["budget"]["max_texture_resolution"] == 512
     assert payload["profile_options"]["budget"]["max_draw_calls"] == 250
+    assert payload["profile_options"]["optimize"]["target_triangles"] == 42_000
 
 
 def test_convert_dry_run_accepts_pipeline_file(tmp_path: Path) -> None:

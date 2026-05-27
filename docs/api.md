@@ -915,7 +915,7 @@ profile = fc.profiles.from_file("factory-tablet.toml", base="realtime-mobile")
 asset = fc.convert("motor.step", "motor.glb", profile=profile)
 ```
 
-The CLI equivalent is `fascat convert motor.step motor.glb --profile realtime-mobile --target-device-profile factory-tablet.toml`. Profile files may be TOML or JSON and currently act as target-device budget overlays; tessellation, repair, staging, optimization, and LOD defaults still come from the selected base profile. When a file overrides `max_triangles` without `max_vertices`, Fascat derives `max_vertices` as three times the triangle budget.
+The CLI equivalent is `fascat convert motor.step motor.glb --profile realtime-mobile --target-device-profile factory-tablet.toml`. Profile files may be TOML or JSON and currently act as target-device budget overlays; tessellation, repair, staging, and LOD defaults still come from the selected base profile. When a file overrides `max_triangles`, Fascat also uses that value as the profile optimization target and derives `max_vertices` as three times the triangle budget unless `max_vertices` is set explicitly.
 
 ## Functional wrappers
 

@@ -257,7 +257,8 @@ unity_reference_triangles = [30000, 60000]
 
     assert profile.name == "factory-tablet-ar"
     assert profile.tessellation == profiles.realtime_mobile().tessellation
-    assert profile.optimize == profiles.realtime_mobile().optimize
+    assert profile.optimize is not None
+    assert profile.optimize.target_triangles == 42_000
     assert profile.budget is not None
     assert profile.budget.max_triangles == 42_000
     assert profile.budget.max_vertices == 126_000
@@ -277,6 +278,8 @@ def test_target_device_profile_from_json_overlays_base_budget(tmp_path: Path) ->
     profile = profiles.from_file(profile_file, base=profiles.mixed_reality())
 
     assert profile.name == "warehouse-headset"
+    assert profile.optimize is not None
+    assert profile.optimize.target_triangles == 75_000
     assert profile.budget is not None
     assert profile.budget.max_triangles == 75_000
     assert profile.budget.max_vertices == 225_000
