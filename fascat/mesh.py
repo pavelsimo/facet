@@ -383,18 +383,31 @@ class Mesh:
         diagnostics = {
             "merge_vertices_candidate_position_buckets": 0,
             "merge_vertices_candidate_vertices": 0,
+            "merge_vertices_candidate_exact_duplicate_buckets": 0,
+            "merge_vertices_candidate_boundary_buckets": 0,
+            "merge_vertices_candidate_non_manifold_buckets": 0,
+            "merge_vertices_candidate_hard_edge_buckets": 0,
             "merge_vertices_skipped_by_protection": 0,
             "merge_vertices_skipped_by_normals": 0,
             "merge_vertices_skipped_by_tangents": 0,
             "merge_vertices_skipped_by_uvs": 0,
             "merge_vertices_skipped_by_material_boundaries": 0,
         }
+        boundary_vertices, non_manifold_vertices = self._merge_vertex_topology_vertices()
         for vertices in buckets.values():
             if len(vertices) <= 1:
                 continue
             diagnostics["merge_vertices_candidate_position_buckets"] += 1
             diagnostics["merge_vertices_candidate_vertices"] += len(vertices) - 1
             full_keys = {self._merge_vertex_key(vertex, options, material_signatures) for vertex in vertices}
+            if len(full_keys) < len(vertices):
+                diagnostics["merge_vertices_candidate_exact_duplicate_buckets"] += 1
+            if any(vertex in boundary_vertices for vertex in vertices):
+                diagnostics["merge_vertices_candidate_boundary_buckets"] += 1
+            if any(vertex in non_manifold_vertices for vertex in vertices):
+                diagnostics["merge_vertices_candidate_non_manifold_buckets"] += 1
+            if self.normals is not None and self._has_distinct_normals(vertices):
+                diagnostics["merge_vertices_candidate_hard_edge_buckets"] += 1
             skipped = len(full_keys) - 1
             if skipped <= 0:
                 continue
@@ -410,6 +423,16 @@ class Mesh:
             ):
                 diagnostics["merge_vertices_skipped_by_material_boundaries"] += skipped
         return diagnostics
+
+    def _merge_vertex_topology_vertices(self) -> tuple[set[int], set[int]]:
+        boundary_vertices: set[int] = set()
+        non_manifold_vertices: set[int] = set()
+        for edge, faces in self._edge_faces_map().items():
+            if len(faces) == 1:
+                boundary_vertices.update(edge)
+            elif len(faces) > 2:
+                non_manifold_vertices.update(edge)
+        return boundary_vertices, non_manifold_vertices
 
     def _has_distinct_normals(self, vertices: list[int]) -> bool:
         assert self.normals is not None

@@ -329,6 +329,10 @@ def test_merge_vertices_asset_operation_reports_counts() -> None:
     assert step.after["merge_vertices_degenerate_triangles_removed"] == 1
     assert step.after["merge_vertices_candidate_position_buckets"] == 1
     assert step.after["merge_vertices_candidate_vertices"] == 1
+    assert step.after["merge_vertices_candidate_exact_duplicate_buckets"] == 1
+    assert step.after["merge_vertices_candidate_boundary_buckets"] == 1
+    assert step.after["merge_vertices_candidate_non_manifold_buckets"] == 0
+    assert step.after["merge_vertices_candidate_hard_edge_buckets"] == 0
     assert step.after["merge_vertices_skipped_by_protection"] == 0
     assert step.after["merge_vertices_skipped_by_normals"] == 0
     assert step.after["merge_vertices_skipped_by_tangents"] == 0

@@ -147,6 +147,10 @@ def test_merge_vertices_preserves_attribute_seams_by_default() -> None:
     assert merged.metadata["merge_vertices_removed"] == "0"
     assert merged.metadata["merge_vertices_candidate_position_buckets"] == "1"
     assert merged.metadata["merge_vertices_candidate_vertices"] == "1"
+    assert merged.metadata["merge_vertices_candidate_exact_duplicate_buckets"] == "0"
+    assert merged.metadata["merge_vertices_candidate_boundary_buckets"] == "1"
+    assert merged.metadata["merge_vertices_candidate_non_manifold_buckets"] == "0"
+    assert merged.metadata["merge_vertices_candidate_hard_edge_buckets"] == "1"
     assert merged.metadata["merge_vertices_skipped_by_protection"] == "1"
     assert merged.metadata["merge_vertices_skipped_by_normals"] == "1"
     assert merged.metadata["merge_vertices_skipped_by_tangents"] == "0"
@@ -170,11 +174,34 @@ def test_merge_vertices_reports_tangent_and_material_boundary_protection() -> No
     assert merged.metadata["merge_vertices_removed"] == "0"
     assert merged.metadata["merge_vertices_candidate_position_buckets"] == "1"
     assert merged.metadata["merge_vertices_candidate_vertices"] == "1"
+    assert merged.metadata["merge_vertices_candidate_exact_duplicate_buckets"] == "0"
+    assert merged.metadata["merge_vertices_candidate_boundary_buckets"] == "1"
+    assert merged.metadata["merge_vertices_candidate_non_manifold_buckets"] == "0"
+    assert merged.metadata["merge_vertices_candidate_hard_edge_buckets"] == "0"
     assert merged.metadata["merge_vertices_skipped_by_protection"] == "1"
     assert merged.metadata["merge_vertices_skipped_by_normals"] == "0"
     assert merged.metadata["merge_vertices_skipped_by_tangents"] == "1"
     assert merged.metadata["merge_vertices_skipped_by_uvs"] == "0"
     assert merged.metadata["merge_vertices_skipped_by_material_boundaries"] == "1"
+
+
+def test_merge_vertices_classifies_non_manifold_candidate_buckets() -> None:
+    mesh = Mesh(
+        points=np.array(
+            [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, 0]],
+            dtype=float,
+        ),
+        faces=np.array([[0, 1, 2], [0, 3, 1], [0, 1, 4], [5, 2, 3]], dtype=int),
+    )
+
+    merged = mesh.merge_vertices(MergeVerticesOptions())
+
+    assert merged.metadata["merge_vertices_candidate_position_buckets"] == "1"
+    assert merged.metadata["merge_vertices_candidate_vertices"] == "1"
+    assert merged.metadata["merge_vertices_candidate_exact_duplicate_buckets"] == "1"
+    assert merged.metadata["merge_vertices_candidate_boundary_buckets"] == "1"
+    assert merged.metadata["merge_vertices_candidate_non_manifold_buckets"] == "1"
+    assert merged.metadata["merge_vertices_candidate_hard_edge_buckets"] == "0"
 
 
 def test_merge_vertices_can_ignore_attributes_and_remove_degenerates() -> None:
