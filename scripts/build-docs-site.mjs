@@ -93,8 +93,28 @@ function esc(s) {
   return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
-function stash(s, buf) { const k=`\x00${buf.length}\x00`; buf.push(s); return k; }
-function unstash(s, buf) { return s.replace(/\x00(\d+)\x00/g,(_,i)=>buf[+i]); }
+const STASH_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function stashId(index) {
+  let value = index;
+  let id = "";
+  do {
+    id = STASH_CHARS[value % STASH_CHARS.length] + id;
+    value = Math.floor(value / STASH_CHARS.length) - 1;
+  } while (value >= 0);
+  return id;
+}
+
+function stashIndex(id) {
+  let index = 0;
+  for (const ch of id) {
+    index = index * STASH_CHARS.length + STASH_CHARS.indexOf(ch) + 1;
+  }
+  return index - 1;
+}
+
+function stash(s, buf) { const k=`\x00${stashId(buf.length)}\x00`; buf.push(s); return k; }
+function unstash(s, buf) { return s.replace(/\x00([A-Za-z]+)\x00/g,(_,i)=>buf[stashIndex(i)]); }
 
 // ── Syntax highlighting ───────────────────────────────────────────────────────
 
@@ -137,11 +157,29 @@ function hlJson(code) {
   return unstash(s,b);
 }
 
+function hlPython(code) {
+  const kw=/\b(and|as|assert|async|await|break|class|continue|def|del|elif|else|except|False|finally|for|from|global|if|import|in|is|lambda|None|nonlocal|not|or|pass|raise|return|True|try|while|with|yield)\b/g;
+  const builtins=/\b(bool|dict|float|int|len|list|object|print|set|str|tuple)\b/g;
+  const b=[]; let s=esc(code);
+  s=s.replace(/("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
+    m=>stash(`<span class=hs>${m}</span>`,b));
+  s=s.replace(/(#.*)$/gm,     m=>stash(`<span class=hc>${m}</span>`,b));
+  s=s.replace(/^(\s*)(@\w[\w.]*)/gm,
+    (_,sp,dec)=>`${sp}${stash(`<span class=hf>${dec}</span>`,b)}`);
+  s=s.replace(/\b(def|class)(\s+)([A-Za-z_]\w*)/g,
+    (_,kwd,sp,name)=>stash(`<span class=hk>${kwd}</span>${sp}<span class=hf>${name}</span>`,b));
+  s=s.replace(kw,             m=>`<span class=hk>${m}</span>`);
+  s=s.replace(builtins,       m=>`<span class=hf>${m}</span>`);
+  s=s.replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class=hn>$1</span>`);
+  return unstash(s,b);
+}
+
 function highlight(lang, code) {
   if (lang==="bash"||lang==="sh"||lang==="zsh") return hlBash(code);
   if (lang==="go")   return hlGo(code);
   if (lang==="yaml"||lang==="yml") return hlYaml(code);
   if (lang==="json") return hlJson(code);
+  if (lang==="python"||lang==="py"||lang==="python3") return hlPython(code);
   return esc(code);
 }
 
@@ -205,7 +243,7 @@ function parse(src) {
       const id=slugify(rawText);
       const text=unstash(inline(rawText,buf),buf);
       if(lvl<=3) toc.push({level:lvl,id,text:rawText});
-      out.push(`<h${lvl} id="${id}"><a class="anchor" href="#${id}">#</a>${text}</h${lvl}>`);
+      out.push(`<h${lvl} id="${id}">${text}</h${lvl}>`);
       continue;
     }
 
@@ -290,9 +328,7 @@ function sidebarHtml(pages, currentSlug) {
   return `<nav class="sidebar" id="sidebar" aria-label="Site navigation">
   <div class="sidebar-brand">
     <a href="index.html" class="brand-link">
-      <span class="brand-mark">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8z"/><path d="M8 6.5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 018 6.5zM8 5a1 1 0 100-2 1 1 0 000 2z"/></svg>
-      </span>
+      <span class="brand-mark" aria-hidden="true">🐱</span>
       ${TOOL}
     </a>
   </div>
@@ -402,9 +438,8 @@ hr{border:none;border-top:1px solid var(--line);margin:2rem 0}
   width:30px;height:30px;border-radius:8px;
   background:var(--accent);
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  font-size:17px;line-height:1;
 }
-.brand-mark svg{fill:#fff}
-[data-theme=dark] .brand-mark svg{fill:#0a0e16}
 
 /* sidebar nav */
 .sidebar-nav{list-style:none;flex:1}
@@ -550,9 +585,6 @@ hr{border:none;border-top:1px solid var(--line);margin:2rem 0}
   border-left:3px solid var(--accent);background:var(--accent-soft);
   padding:10px 16px;border-radius:0 8px 8px 0;margin:1.4em 0;color:var(--text);
 }
-.anchor{opacity:0;font-size:.8em;color:var(--muted);margin-right:.4rem;text-decoration:none}
-h2:hover .anchor,h3:hover .anchor{opacity:1}
-
 /* ── Inline code ────────────────────────────────────── */
 code{
   background:var(--surface2);border-radius:5px;
