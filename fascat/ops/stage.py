@@ -26,6 +26,7 @@ def stage_asset(asset: Asset, options: StageOptions, *, selected_part_ids: set[s
         if part.mesh is None:
             continue
         mesh = part.mesh
+        uv_modes: dict[int, str] = {}
         if options.normals and options.normal_mode == "hard_edges":
             mesh = mesh.compute_hard_edge_normals(
                 hard_edge_angle=options.hard_edge_angle,
@@ -40,19 +41,24 @@ def stage_asset(asset: Asset, options: StageOptions, *, selected_part_ids: set[s
         if options.uv0 == "box":
             mesh = mesh.box_uv(0)
             _tag_uv_metadata(mesh, 0, "box", options)
+            uv_modes[0] = "box"
         elif options.uv0 in {"unwrap", "lightmap"}:
             mesh = _unwrap_uv(mesh, 0)
             _tag_uv_metadata(mesh, 0, options.uv0, options)
+            uv_modes[0] = options.uv0
         if options.uv1 == "box":
             mesh = mesh.box_uv(1)
             _tag_uv_metadata(mesh, 1, "box", options)
+            uv_modes[1] = "box"
         elif options.uv1 in {"unwrap", "lightmap"}:
             mesh = _unwrap_uv(mesh, 1)
             _tag_uv_metadata(mesh, 1, options.uv1, options)
+            uv_modes[1] = options.uv1
         if options.tangents:
             mesh = mesh.compute_tangents()
         if options.validate_normals:
             mesh.validate_normals(require_tangents=options.tangents)
+        _tag_uv_layout_quality(result, part.id, mesh, uv_modes)
         part.mesh = mesh
         part.fingerprint = mesh.fingerprint()
     return result
@@ -157,6 +163,29 @@ def _tag_uv_metadata(mesh: Mesh, channel: int, mode: str, options: StageOptions)
     if options.atlas.enabled:
         mesh.metadata[f"{prefix}_atlas"] = "atlas_0"
         mesh.metadata[f"{prefix}_atlas_size"] = str(options.atlas.max_size)
+
+
+def _tag_uv_layout_quality(asset: Asset, part_id: str, mesh: Mesh, uv_modes: dict[int, str]) -> None:
+    for channel in sorted(mesh.uvs):
+        prefix = f"uv{channel}"
+        mode = uv_modes.get(channel, str(mesh.metadata.get(f"{prefix}_mode", mesh.metadata.get(prefix, "existing"))))
+        stats = mesh.uv_layout_stats(channel)
+        mesh.metadata[f"{prefix}_out_of_unit_vertices"] = str(stats["out_of_unit_vertices"])
+        mesh.metadata[f"{prefix}_degenerate_faces"] = str(stats["degenerate_faces"])
+        mesh.metadata[f"{prefix}_overlap_pairs"] = str(stats["overlapping_face_pairs"])
+        if channel != 1 and mode != "lightmap":
+            continue
+        problems: list[str] = []
+        if stats["out_of_unit_vertices"]:
+            problems.append(f"{stats['out_of_unit_vertices']} UV vertices outside 0..1")
+        if stats["degenerate_faces"]:
+            problems.append(f"{stats['degenerate_faces']} degenerate UV faces")
+        if stats["overlapping_face_pairs"]:
+            problems.append(f"{stats['overlapping_face_pairs']} overlapping UV face pairs")
+        if problems:
+            asset.report.add_warning(
+                f"part {part_id} {prefix} violates lightmap/baking constraints: {', '.join(problems)}"
+            )
 
 
 def _material_key(material: Material) -> tuple[object, ...]:

@@ -510,7 +510,7 @@ def test_convert_fixture_writes_usd_and_report(tmp_path: Path) -> None:
     assert "validate" in step_names
     assert report["source_path"].endswith("spool-clamp-lid.step")
     assert report["finished_at"] is not None
-    assert report["warnings"] == []
+    assert any("uv1 violates lightmap/baking constraints" in warning for warning in report["warnings"])
     assert report["errors"] == []
     assert report["input_stats"]["parts"] == 1
     assert report["input_stats"]["materials"] == 1

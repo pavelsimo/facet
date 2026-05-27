@@ -478,6 +478,8 @@ asset = asset.stage(
 
 Atlas support currently records atlas and texture-bake metadata on materials and meshes. It does not write atlas images. Dedicated material baking is a separate optimization step; it emits constant embedded texture maps from material factors and glTF can export those maps as material textures.
 
+Staged meshes also record UV layout quality metadata for each channel: `uvN_out_of_unit_vertices`, `uvN_degenerate_faces`, and `uvN_overlap_pairs`. UV0 overlaps are allowed for tileable material workflows and are recorded as metadata only. UV1 or `lightmap` channels add stage warnings when they contain overlaps, degenerate UV faces, or coordinates outside the 0..1 bake domain.
+
 Staging, UV, and material parameters:
 
 | Option | Parameter | Meaning |

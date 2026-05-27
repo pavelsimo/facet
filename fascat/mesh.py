@@ -14,6 +14,7 @@ from fascat.options import RepairOptions
 
 FloatArray = NDArray[np.float64]
 IntArray = NDArray[np.int64]
+Point2D = tuple[float, float]
 
 
 class MeshValidationError(ValueError):
@@ -30,6 +31,66 @@ def _vector_angles(left: FloatArray, right: FloatArray) -> FloatArray:
         cosines = np.einsum("ij,ij->i", left[valid], right[valid]) / denom[valid]
         angles[valid] = np.arccos(np.clip(cosines, -1.0, 1.0))
     return angles
+
+
+def _polygon_area_2d(points: list[Point2D]) -> float:
+    if len(points) < 3:
+        return 0.0
+    area = 0.0
+    previous = points[-1]
+    for point in points:
+        area += previous[0] * point[1] - point[0] * previous[1]
+        previous = point
+    return area * 0.5
+
+
+def _inside_clip_edge(point: Point2D, start: Point2D, end: Point2D, orientation: float, tolerance: float) -> bool:
+    cross = (end[0] - start[0]) * (point[1] - start[1]) - (end[1] - start[1]) * (point[0] - start[0])
+    return cross * orientation >= -tolerance
+
+
+def _line_intersection_2d(start: Point2D, end: Point2D, clip_start: Point2D, clip_end: Point2D) -> Point2D:
+    direction = (end[0] - start[0], end[1] - start[1])
+    clip_direction = (clip_end[0] - clip_start[0], clip_end[1] - clip_start[1])
+    denom = direction[0] * clip_direction[1] - direction[1] * clip_direction[0]
+    if abs(denom) <= 1e-15:
+        return end
+    offset = (clip_start[0] - start[0], clip_start[1] - start[1])
+    factor = (offset[0] * clip_direction[1] - offset[1] * clip_direction[0]) / denom
+    return (start[0] + factor * direction[0], start[1] + factor * direction[1])
+
+
+def _clip_polygon_to_triangle(subject: list[Point2D], clip: list[Point2D], *, tolerance: float) -> list[Point2D]:
+    orientation = 1.0 if _polygon_area_2d(clip) >= 0.0 else -1.0
+    output = subject
+    for index, clip_start in enumerate(clip):
+        clip_end = clip[(index + 1) % len(clip)]
+        input_points = output
+        output = []
+        if not input_points:
+            break
+        previous = input_points[-1]
+        previous_inside = _inside_clip_edge(previous, clip_start, clip_end, orientation, tolerance)
+        for current in input_points:
+            current_inside = _inside_clip_edge(current, clip_start, clip_end, orientation, tolerance)
+            if current_inside:
+                if not previous_inside:
+                    output.append(_line_intersection_2d(previous, current, clip_start, clip_end))
+                output.append(current)
+            elif previous_inside:
+                output.append(_line_intersection_2d(previous, current, clip_start, clip_end))
+            previous = current
+            previous_inside = current_inside
+    return output
+
+
+def _triangle_overlap_area_2d(left: FloatArray, right: FloatArray, *, tolerance: float) -> float:
+    subject = [(float(point[0]), float(point[1])) for point in left]
+    clip = [(float(point[0]), float(point[1])) for point in right]
+    if abs(_polygon_area_2d(subject)) <= tolerance or abs(_polygon_area_2d(clip)) <= tolerance:
+        return 0.0
+    intersection = _clip_polygon_to_triangle(subject, clip, tolerance=tolerance)
+    return abs(_polygon_area_2d(intersection))
 
 
 @dataclass
@@ -671,6 +732,63 @@ class Mesh:
         mesh.uvs[channel] = uv.astype(np.float64)
         mesh.tangents = None
         return mesh
+
+    def uv_layout_stats(self, channel: int = 0, *, tolerance: float = 1e-9) -> dict[str, int]:
+        if tolerance < 0.0:
+            raise ValueError("tolerance must be greater than or equal to 0")
+        if channel not in self.uvs:
+            raise ValueError(f"uv channel {channel} is not present")
+
+        uv = self.uvs[channel]
+        out_of_unit_vertices = int(np.count_nonzero(np.any((uv < -tolerance) | (uv > 1.0 + tolerance), axis=1)))
+        if self.triangle_count == 0:
+            return {
+                "vertices": self.vertex_count,
+                "faces": 0,
+                "out_of_unit_vertices": out_of_unit_vertices,
+                "degenerate_faces": 0,
+                "overlapping_face_pairs": 0,
+            }
+
+        triangles = uv[self.faces]
+        edge_a = triangles[:, 1] - triangles[:, 0]
+        edge_b = triangles[:, 2] - triangles[:, 0]
+        signed_areas = 0.5 * (edge_a[:, 0] * edge_b[:, 1] - edge_a[:, 1] * edge_b[:, 0])
+        degenerate = np.abs(signed_areas) <= tolerance
+        min_uv = triangles.min(axis=1)
+        max_uv = triangles.max(axis=1)
+        order = np.argsort(min_uv[:, 0], kind="mergesort")
+
+        overlapping_pairs = 0
+        for position, left_index_value in enumerate(order):
+            left_index = int(left_index_value)
+            if bool(degenerate[left_index]):
+                continue
+            left_min = min_uv[left_index]
+            left_max = max_uv[left_index]
+            for right_index_value in order[position + 1 :]:
+                right_index = int(right_index_value)
+                if min_uv[right_index, 0] > left_max[0] + tolerance:
+                    break
+                if bool(degenerate[right_index]):
+                    continue
+                if min_uv[right_index, 1] > left_max[1] + tolerance:
+                    continue
+                if max_uv[right_index, 1] + tolerance < left_min[1]:
+                    continue
+                if (
+                    _triangle_overlap_area_2d(triangles[left_index], triangles[right_index], tolerance=tolerance)
+                    > tolerance
+                ):
+                    overlapping_pairs += 1
+
+        return {
+            "vertices": self.vertex_count,
+            "faces": self.triangle_count,
+            "out_of_unit_vertices": out_of_unit_vertices,
+            "degenerate_faces": int(np.count_nonzero(degenerate)),
+            "overlapping_face_pairs": overlapping_pairs,
+        }
 
     def unwrap_uv(self, channel: int = 0) -> Mesh:
         try:

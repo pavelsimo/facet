@@ -248,6 +248,44 @@ def test_box_uv_matches_vertex_count() -> None:
     assert staged.uvs[0].max() <= 1.0
 
 
+def test_uv_layout_stats_detects_overlap_bounds_and_degenerate_faces() -> None:
+    mesh = Mesh(
+        points=np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [1, 0, 1],
+                [0, 1, 1],
+                [2, 0, 0],
+            ],
+            dtype=float,
+        ),
+        faces=np.array([[0, 1, 2], [3, 4, 5], [0, 1, 6]], dtype=int),
+        uvs={
+            0: np.array(
+                [
+                    [0, 0],
+                    [1, 0],
+                    [0, 1],
+                    [0, 0],
+                    [1, 0],
+                    [0, 1],
+                    [2, 0],
+                ],
+                dtype=float,
+            )
+        },
+    )
+
+    stats = mesh.uv_layout_stats(0)
+
+    assert stats["out_of_unit_vertices"] == 1
+    assert stats["degenerate_faces"] == 1
+    assert stats["overlapping_face_pairs"] == 1
+
+
 def test_subdivide_long_edges_enforces_limit_and_preserves_materials() -> None:
     mesh = Mesh(
         points=np.array([[0, 0, 0], [4, 0, 0], [0, 3, 0]], dtype=float),

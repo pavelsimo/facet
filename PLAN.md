@@ -202,9 +202,10 @@ These need more design and should not be mixed into documentation or diagnostics
    - KTX2/Basis texture compression is now rejected instead of recorded as metadata-only intent.
    - Remaining polish: add real KTX2/Basis output only after texture assets are real files in the export graph, and add a Draco path only if a reliable Python encoder exists.
 
-9. UV pipeline depth
-   - Add seam segmentation, unwrap method selection, island merging, packing, normalization, and overlap checks.
-   - Keep UV1 baking constraints separate from UV0 tileable texture constraints.
+9. UV pipeline depth - first layout quality pass complete
+   - Stage now records per-channel UV bounds, degenerate UV face counts, and overlap-pair counts on mesh metadata.
+   - UV1 or `lightmap` channels warn on bake-domain violations, while UV0 overlaps remain metadata-only for tileable texture workflows.
+   - Remaining polish: add seam segmentation, unwrap method selection, island merging, packing, normalization, and deeper per-channel validation.
 
 10. Instance reconstruction
    - Detect similar separately modeled parts and rebuild shared mesh instances where safe.
