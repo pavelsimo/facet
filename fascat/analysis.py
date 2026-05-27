@@ -415,6 +415,7 @@ def _asset_from_gltf(path: Path) -> Asset:
             parts,
             nodes,
             material_ids_by_index,
+            transform=np.eye(4, dtype=np.float64),
             stack=set(),
         )
     return Asset(
@@ -430,6 +431,7 @@ def _append_gltf_node_parts(
     nodes: list[Node],
     material_ids_by_index: dict[int, str],
     *,
+    transform: NDArray[np.float64],
     stack: set[int],
 ) -> None:
     from fascat.io import gltf as gltf_io
@@ -438,6 +440,7 @@ def _append_gltf_node_parts(
         raise RuntimeError("glTF node hierarchy contains a cycle")
     node_values = gltf_io._array(document.get("nodes"), "nodes")
     node = gltf_io._object(node_values[node_index], f"node {node_index}")
+    node_transform = transform @ _gltf_node_transform(node)
     mesh_index = node.get("mesh")
     if mesh_index is not None:
         part_node = _gltf_mesh_part(
@@ -448,6 +451,7 @@ def _append_gltf_node_parts(
             material_ids_by_index,
             node_name=str(node.get("name", f"Node {node_index}")),
             node_metadata=_fascat_metadata(node),
+            node_transform=node_transform,
         )
         nodes.append(part_node)
     for child_index in gltf_io._array(node.get("children", []), f"node {node_index} children"):
@@ -458,8 +462,52 @@ def _append_gltf_node_parts(
             parts,
             nodes,
             material_ids_by_index,
+            transform=node_transform,
             stack=stack | {node_index},
         )
+
+
+def _gltf_node_transform(node: dict[str, Any]) -> NDArray[np.float64]:
+    matrix = node.get("matrix")
+    if isinstance(matrix, list) and len(matrix) == 16:
+        matrix_values = np.asarray(matrix, dtype=np.float64).reshape((4, 4)).T
+        return cast(NDArray[np.float64], matrix_values)
+    translation_matrix = np.eye(4, dtype=np.float64)
+    translation = node.get("translation")
+    if isinstance(translation, list) and len(translation) == 3:
+        translation_matrix[:3, 3] = np.asarray(translation, dtype=np.float64)
+    rotation_matrix = np.eye(4, dtype=np.float64)
+    rotation = node.get("rotation")
+    if isinstance(rotation, list) and len(rotation) == 4:
+        rotation_matrix[:3, :3] = _quaternion_matrix([float(value) for value in rotation])
+    scale_matrix = np.eye(4, dtype=np.float64)
+    scale = node.get("scale")
+    if isinstance(scale, list) and len(scale) == 3:
+        scale_matrix = np.diag([float(scale[0]), float(scale[1]), float(scale[2]), 1.0])
+    return translation_matrix @ rotation_matrix @ scale_matrix
+
+
+def _quaternion_matrix(rotation: list[float]) -> NDArray[np.float64]:
+    x, y, z, w = rotation
+    length = float(np.linalg.norm(np.asarray([x, y, z, w], dtype=np.float64)))
+    if length == 0.0:
+        return np.eye(3, dtype=np.float64)
+    x, y, z, w = x / length, y / length, z / length, w / length
+    return np.asarray(
+        [
+            [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)],
+            [2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)],
+            [2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)],
+        ],
+        dtype=np.float64,
+    )
+
+
+def _transform_points(points: FloatArray, matrix: NDArray[np.float64]) -> FloatArray:
+    if not len(points):
+        return points
+    homogeneous = np.column_stack([points, np.ones(points.shape[0], dtype=np.float64)])
+    return cast(FloatArray, (matrix @ homogeneous.T).T[:, :3])
 
 
 def _gltf_mesh_part(
@@ -471,6 +519,7 @@ def _gltf_mesh_part(
     *,
     node_name: str,
     node_metadata: dict[str, object],
+    node_transform: NDArray[np.float64],
 ) -> Node:
     from fascat.io import gltf as gltf_io
 
@@ -489,7 +538,7 @@ def _gltf_mesh_part(
         primitive = gltf_io._object(primitive_value, f"mesh {mesh_index} primitive {primitive_index}")
         attributes = gltf_io._object(primitive.get("attributes"), f"mesh {mesh_index} primitive attributes")
         position_index = gltf_io._int(attributes.get("POSITION"), f"mesh {mesh_index} POSITION accessor")
-        points = _read_gltf_float_accessor(document, buffers, position_index)
+        points = _transform_points(_read_gltf_float_accessor(document, buffers, position_index), node_transform)
         indices = primitive.get("indices")
         if indices is None:
             faces = np.arange(points.shape[0], dtype=np.int64).reshape((-1, 3))
@@ -527,7 +576,14 @@ def _gltf_mesh_part(
 
 
 def _read_gltf_float_accessor(document: dict[str, Any], buffers: list[bytes], accessor_index: int) -> FloatArray:
-    return cast(FloatArray, _read_gltf_accessor(document, buffers, accessor_index).astype(np.float64))
+    from fascat.io import gltf as gltf_io
+
+    accessor = gltf_io._require_accessor(document, accessor_index)
+    component_type = gltf_io._int(accessor.get("componentType"), f"accessor {accessor_index} componentType")
+    values = _read_gltf_accessor(document, buffers, accessor_index).astype(np.float64)
+    if accessor.get("normalized") is True:
+        values = _normalize_gltf_accessor(values, component_type)
+    return values
 
 
 def _read_gltf_int_accessor(document: dict[str, Any], buffers: list[bytes], accessor_index: int) -> IntArray:
@@ -570,6 +626,18 @@ def _read_gltf_accessor(document: dict[str, Any], buffers: list[bytes], accessor
         row_offset = offset + row * stride
         values[row] = np.frombuffer(buffer, dtype=dtype, count=width, offset=row_offset)
     return cast(NDArray[Any], values.copy())
+
+
+def _normalize_gltf_accessor(values: NDArray[np.float64], component_type: int) -> NDArray[np.float64]:
+    if component_type == 5120:
+        return np.maximum(values / 127.0, -1.0)
+    if component_type == 5121:
+        return values / 255.0
+    if component_type == 5122:
+        return np.maximum(values / 32767.0, -1.0)
+    if component_type == 5123:
+        return values / 65535.0
+    return values
 
 
 def _gltf_materials(document: dict[str, Any]) -> tuple[dict[str, Material], dict[int, str]]:

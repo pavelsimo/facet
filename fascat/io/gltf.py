@@ -24,15 +24,19 @@ _BIN_CHUNK = 0x004E4942
 
 _ARRAY_BUFFER = 34962
 _ELEMENT_ARRAY_BUFFER = 34963
+_BYTE = 5120
+_UNSIGNED_BYTE = 5121
+_SHORT = 5122
 _FLOAT = 5126
 _UNSIGNED_SHORT = 5123
 _UNSIGNED_INT = 5125
+_KHR_MESH_QUANTIZATION = "KHR_mesh_quantization"
 
 _COMPONENT_SIZES = {
-    5120: 1,
-    5121: 1,
+    _BYTE: 1,
+    _UNSIGNED_BYTE: 1,
     _UNSIGNED_SHORT: 2,
-    5122: 2,
+    _SHORT: 2,
     _UNSIGNED_INT: 4,
     _FLOAT: 4,
 }
@@ -47,7 +51,7 @@ def write_gltf(asset: Asset, path: str | Path, *, options: GltfExportOptions | N
         raise ValueError(f"unsupported glTF extension: {output_path.suffix or '<none>'}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    document, binary = _build_document(asset, metadata_options=opts.metadata)
+    document, binary = _build_document(asset, metadata_options=opts.metadata, quantize=opts.quantize)
     _apply_export_options(document, opts)
     if opts.meshopt:
         binary = _apply_meshopt_compression(document, binary)
@@ -85,13 +89,15 @@ class _BufferBuilder:
         component_type: int,
         accessor_type: Literal["SCALAR", "VEC2", "VEC3", "VEC4"],
         target: int,
-        minimum: list[float] | None = None,
-        maximum: list[float] | None = None,
+        minimum: list[float | int] | None = None,
+        maximum: list[float | int] | None = None,
+        normalized: bool = False,
+        byte_stride: int | None = None,
     ) -> int:
         self._align()
         contiguous = np.ascontiguousarray(values)
         byte_offset = len(self.data)
-        payload = contiguous.tobytes()
+        payload = _accessor_payload(contiguous, accessor_type, component_type, byte_stride)
         self.data.extend(payload)
         buffer_view: dict[str, object] = {
             "buffer": 0,
@@ -99,6 +105,8 @@ class _BufferBuilder:
             "byteLength": len(payload),
             "target": target,
         }
+        if byte_stride is not None:
+            buffer_view["byteStride"] = byte_stride
         self.buffer_views.append(buffer_view)
         accessor: dict[str, object] = {
             "bufferView": len(self.buffer_views) - 1,
@@ -111,6 +119,8 @@ class _BufferBuilder:
             accessor["min"] = minimum
         if maximum is not None:
             accessor["max"] = maximum
+        if normalized:
+            accessor["normalized"] = True
         self.accessors.append(accessor)
         return len(self.accessors) - 1
 
@@ -118,6 +128,27 @@ class _BufferBuilder:
         padding = (-len(self.data)) % 4
         if padding:
             self.data.extend(b"\x00" * padding)
+
+
+def _accessor_payload(
+    values: NDArray[Any],
+    accessor_type: Literal["SCALAR", "VEC2", "VEC3", "VEC4"],
+    component_type: int,
+    byte_stride: int | None,
+) -> bytes:
+    width = _ACCESSOR_WIDTHS[accessor_type]
+    component_size = _COMPONENT_SIZES[component_type]
+    item_size = width * component_size
+    if byte_stride is None:
+        return values.tobytes()
+    if byte_stride < item_size or byte_stride % 4:
+        raise ValueError("glTF vertex byte stride must be a 4-byte aligned size that fits the accessor item")
+    rows = np.ascontiguousarray(values.reshape((values.shape[0], width)))
+    payload = bytearray(byte_stride * rows.shape[0])
+    for index, row in enumerate(rows):
+        start = index * byte_stride
+        payload[start : start + item_size] = row.tobytes()
+    return bytes(payload)
 
 
 @dataclass(frozen=True)
@@ -128,12 +159,29 @@ class _ExportSpace:
     inverse_matrix: NDArray[np.float64]
 
 
+@dataclass(frozen=True)
+class _PartQuantization:
+    offset: NDArray[np.float64]
+    scale: float
+
+    @property
+    def matrix(self) -> NDArray[np.float64]:
+        matrix = np.eye(4, dtype=np.float64)
+        matrix[0, 0] = self.scale
+        matrix[1, 1] = self.scale
+        matrix[2, 2] = self.scale
+        matrix[:3, 3] = self.offset
+        return matrix
+
+
 def _build_document(
     asset: Asset,
     *,
     metadata_options: MetadataExportOptions,
+    quantize: bool,
 ) -> tuple[dict[str, Any], bytes]:
     export_space = _export_space(asset)
+    quantization = _part_quantization(asset, export_space) if quantize else {}
     builder = _BufferBuilder()
     material_indices = _write_materials(asset.materials, metadata_options)
     meshes: list[dict[str, Any]] = []
@@ -152,6 +200,7 @@ def _build_document(
             material_indices,
             export_space,
             metadata_options,
+            quantization.get(part.id),
             lod=0,
             pmi_ids=pmi_by_part.get(part.id, []),
         )
@@ -165,6 +214,7 @@ def _build_document(
                 material_indices,
                 export_space,
                 metadata_options,
+                quantization.get(part.id),
                 lod=lod,
                 pmi_ids=pmi_by_part.get(part.id, []),
             )
@@ -173,7 +223,7 @@ def _build_document(
             part_lods[part.id] = lod_entries
 
     nodes: list[dict[str, Any]] = []
-    root_node = _append_node(nodes, asset.root, part_meshes, part_lods, export_space, metadata_options)
+    root_node = _append_node(nodes, asset.root, part_meshes, part_lods, export_space, metadata_options, quantization)
     binary = bytes(builder.data)
     buffers: list[dict[str, object]] = [{"byteLength": len(binary)}]
 
@@ -202,6 +252,9 @@ def _build_document(
             {key: value for key, value in material.items() if key != "_fascat_index"}
             for material in material_indices.values()
         ]
+    if quantization:
+        _add_extension_used(document, _KHR_MESH_QUANTIZATION)
+        _add_extension_required(document, _KHR_MESH_QUANTIZATION)
     return document, binary
 
 
@@ -253,6 +306,43 @@ def _metadata_summary(asset: Asset) -> dict[str, object]:
     }
 
 
+def _part_quantization(asset: Asset, export_space: _ExportSpace) -> dict[str, _PartQuantization]:
+    result: dict[str, _PartQuantization] = {}
+    for part in asset.parts.values():
+        meshes = [mesh for mesh in (part.mesh, *part.lod_meshes) if mesh is not None and mesh.vertex_count]
+        if not meshes:
+            continue
+        points = np.vstack([_points_to_export_space(mesh.points, export_space.linear) for mesh in meshes])
+        minimum = points.min(axis=0)
+        maximum = points.max(axis=0)
+        extent = maximum - minimum
+        max_extent = float(extent.max())
+        scale = max_extent / float(np.iinfo(np.uint16).max) if max_extent > 0.0 else 1.0
+        result[part.id] = _PartQuantization(offset=minimum.astype(np.float64), scale=scale)
+    return result
+
+
+def _quantize_positions(points: NDArray[np.float64], quantization: _PartQuantization) -> NDArray[np.uint16]:
+    if not len(points):
+        return np.empty((0, 3), dtype=np.uint16)
+    scaled = (points - quantization.offset) / quantization.scale
+    return cast(NDArray[np.uint16], np.clip(np.rint(scaled), 0, np.iinfo(np.uint16).max).astype(np.uint16))
+
+
+def _quantize_snorm8(values: NDArray[np.float64]) -> NDArray[np.int8]:
+    quantized = np.clip(np.rint(np.clip(values, -1.0, 1.0) * 127.0), -127, 127)
+    return cast(NDArray[np.int8], quantized.astype(np.int8))
+
+
+def _can_quantize_unorm(values: NDArray[np.float64]) -> bool:
+    return bool(values.size == 0 or (np.all(values >= 0.0) and np.all(values <= 1.0)))
+
+
+def _quantize_unorm16(values: NDArray[np.float64]) -> NDArray[np.uint16]:
+    quantized = np.clip(np.rint(np.clip(values, 0.0, 1.0) * 65535.0), 0, np.iinfo(np.uint16).max)
+    return cast(NDArray[np.uint16], quantized.astype(np.uint16))
+
+
 def _append_mesh(
     builder: _BufferBuilder,
     meshes: list[dict[str, Any]],
@@ -261,52 +351,105 @@ def _append_mesh(
     material_indices: dict[str, dict[str, Any]],
     export_space: _ExportSpace,
     metadata_options: MetadataExportOptions,
+    quantization: _PartQuantization | None,
     *,
     lod: int,
     pmi_ids: list[str],
 ) -> int:
     mesh.validate()
-    points = _points_to_export_space(mesh.points, export_space.linear).astype(np.float32)
-    position_accessor = builder.add_accessor(
-        points,
-        component_type=_FLOAT,
-        accessor_type="VEC3",
-        target=_ARRAY_BUFFER,
-        minimum=points.min(axis=0).astype(float).tolist() if len(points) else [0.0, 0.0, 0.0],
-        maximum=points.max(axis=0).astype(float).tolist() if len(points) else [0.0, 0.0, 0.0],
-    )
-    attributes: dict[str, int] = {"POSITION": position_accessor}
-    if mesh.normals is not None:
-        normals = _normals_to_export_space(mesh.normals, export_space.normal_linear).astype(np.float32)
-        attributes["NORMAL"] = builder.add_accessor(
-            normals,
+    points = _points_to_export_space(mesh.points, export_space.linear)
+    if quantization is None:
+        float_points = points.astype(np.float32)
+        position_accessor = builder.add_accessor(
+            float_points,
             component_type=_FLOAT,
             accessor_type="VEC3",
             target=_ARRAY_BUFFER,
+            minimum=float_points.min(axis=0).astype(float).tolist() if len(float_points) else [0.0, 0.0, 0.0],
+            maximum=float_points.max(axis=0).astype(float).tolist() if len(float_points) else [0.0, 0.0, 0.0],
         )
+    else:
+        quantized_points = _quantize_positions(points, quantization)
+        position_accessor = builder.add_accessor(
+            quantized_points,
+            component_type=_UNSIGNED_SHORT,
+            accessor_type="VEC3",
+            target=_ARRAY_BUFFER,
+            minimum=quantized_points.min(axis=0).astype(int).tolist() if len(quantized_points) else [0, 0, 0],
+            maximum=quantized_points.max(axis=0).astype(int).tolist() if len(quantized_points) else [0, 0, 0],
+            byte_stride=8,
+        )
+    attributes: dict[str, int] = {"POSITION": position_accessor}
+    if mesh.normals is not None:
+        normals = _normals_to_export_space(mesh.normals, export_space.normal_linear)
+        if quantization is None:
+            attributes["NORMAL"] = builder.add_accessor(
+                normals.astype(np.float32),
+                component_type=_FLOAT,
+                accessor_type="VEC3",
+                target=_ARRAY_BUFFER,
+            )
+        else:
+            attributes["NORMAL"] = builder.add_accessor(
+                _quantize_snorm8(normals),
+                component_type=_BYTE,
+                accessor_type="VEC3",
+                target=_ARRAY_BUFFER,
+                normalized=True,
+                byte_stride=4,
+            )
     if mesh.tangents is not None:
         tangents = mesh.tangents.copy()
         tangents[:, :3] = _normals_to_export_space(mesh.tangents[:, :3], export_space.normal_linear)
-        attributes["TANGENT"] = builder.add_accessor(
-            tangents.astype(np.float32),
-            component_type=_FLOAT,
-            accessor_type="VEC4",
-            target=_ARRAY_BUFFER,
-        )
+        if quantization is None:
+            attributes["TANGENT"] = builder.add_accessor(
+                tangents.astype(np.float32),
+                component_type=_FLOAT,
+                accessor_type="VEC4",
+                target=_ARRAY_BUFFER,
+            )
+        else:
+            attributes["TANGENT"] = builder.add_accessor(
+                _quantize_snorm8(tangents),
+                component_type=_BYTE,
+                accessor_type="VEC4",
+                target=_ARRAY_BUFFER,
+                normalized=True,
+            )
     if 0 in mesh.uvs:
-        attributes["TEXCOORD_0"] = builder.add_accessor(
-            mesh.uvs[0].astype(np.float32),
-            component_type=_FLOAT,
-            accessor_type="VEC2",
-            target=_ARRAY_BUFFER,
-        )
+        uv0 = mesh.uvs[0]
+        if quantization is not None and _can_quantize_unorm(uv0):
+            attributes["TEXCOORD_0"] = builder.add_accessor(
+                _quantize_unorm16(uv0),
+                component_type=_UNSIGNED_SHORT,
+                accessor_type="VEC2",
+                target=_ARRAY_BUFFER,
+                normalized=True,
+            )
+        else:
+            attributes["TEXCOORD_0"] = builder.add_accessor(
+                uv0.astype(np.float32),
+                component_type=_FLOAT,
+                accessor_type="VEC2",
+                target=_ARRAY_BUFFER,
+            )
     if 1 in mesh.uvs:
-        attributes["TEXCOORD_1"] = builder.add_accessor(
-            mesh.uvs[1].astype(np.float32),
-            component_type=_FLOAT,
-            accessor_type="VEC2",
-            target=_ARRAY_BUFFER,
-        )
+        uv1 = mesh.uvs[1]
+        if quantization is not None and _can_quantize_unorm(uv1):
+            attributes["TEXCOORD_1"] = builder.add_accessor(
+                _quantize_unorm16(uv1),
+                component_type=_UNSIGNED_SHORT,
+                accessor_type="VEC2",
+                target=_ARRAY_BUFFER,
+                normalized=True,
+            )
+        else:
+            attributes["TEXCOORD_1"] = builder.add_accessor(
+                uv1.astype(np.float32),
+                component_type=_FLOAT,
+                accessor_type="VEC2",
+                target=_ARRAY_BUFFER,
+            )
 
     primitives: list[dict[str, Any]] = []
     for material_id, faces in _face_groups(part, mesh):
@@ -483,6 +626,13 @@ def _add_extension_used(document: dict[str, Any], extension: str) -> None:
         extensions.append(extension)
 
 
+def _add_extension_required(document: dict[str, Any], extension: str) -> None:
+    extensions = document.setdefault("extensionsRequired", [])
+    if isinstance(extensions, list) and extension not in extensions:
+        extensions.append(extension)
+    _add_extension_used(document, extension)
+
+
 def _embed_binary_uri(document: dict[str, Any], binary: bytes) -> None:
     buffers = _array(document.get("buffers"), "buffers")
     buffer = _object(buffers[0], "buffer 0")
@@ -527,6 +677,7 @@ def _append_node(
     part_lods: dict[str, list[dict[str, object]]],
     export_space: _ExportSpace,
     metadata_options: MetadataExportOptions,
+    quantization: dict[str, _PartQuantization],
 ) -> int:
     fascat_extras: dict[str, object] = {"nodeId": node.id}
     if metadata_options.mode == "full":
@@ -537,6 +688,8 @@ def _append_node(
         "extras": {"fascat": fascat_extras},
     }
     transform = _matrix_to_export_space(node.transform, export_space)
+    if node.part_id is not None and node.part_id in quantization:
+        transform = transform @ quantization[node.part_id].matrix
     if not np.allclose(transform, np.eye(4)):
         gltf_node["matrix"] = transform.T.reshape(-1).astype(float).tolist()
     if node.part_id is not None and node.part_id in part_meshes:
@@ -548,7 +701,8 @@ def _append_node(
     index = len(nodes)
     nodes.append(gltf_node)
     children = [
-        _append_node(nodes, child, part_meshes, part_lods, export_space, metadata_options) for child in node.children
+        _append_node(nodes, child, part_meshes, part_lods, export_space, metadata_options, quantization)
+        for child in node.children
     ]
     if children:
         gltf_node["children"] = children
@@ -783,7 +937,9 @@ def _validate_mesh(document: dict[str, Any], mesh_index: int, stats: dict[str, i
             raise RuntimeError("glTF validation only supports triangle primitives")
         attributes = _object(primitive.get("attributes"), f"mesh {mesh_index} primitive attributes")
         position_index = _int(attributes.get("POSITION"), f"mesh {mesh_index} POSITION accessor")
-        _require_accessor(document, position_index, component_type=_FLOAT, accessor_type="VEC3")
+        position_accessor = _require_accessor(document, position_index, accessor_type="VEC3")
+        if not _position_accessor_allowed(document, position_accessor):
+            raise RuntimeError("glTF POSITION accessor must use FLOAT or KHR_mesh_quantization component types")
         position_accessors.add(position_index)
         indices = primitive.get("indices")
         if indices is None:
@@ -825,6 +981,24 @@ def _require_accessor(
     if accessor_type is not None and accessor.get("type") != accessor_type:
         raise RuntimeError("glTF accessor has the wrong type")
     return accessor
+
+
+def _position_accessor_allowed(document: dict[str, Any], accessor: dict[str, Any]) -> bool:
+    component_type = _int(accessor.get("componentType"), "POSITION accessor componentType")
+    if component_type == _FLOAT:
+        return True
+    return _has_extension(document, _KHR_MESH_QUANTIZATION) and component_type in {
+        _BYTE,
+        _UNSIGNED_BYTE,
+        _SHORT,
+        _UNSIGNED_SHORT,
+    }
+
+
+def _has_extension(document: dict[str, Any], extension: str) -> bool:
+    used = document.get("extensionsUsed", [])
+    required = document.get("extensionsRequired", [])
+    return (isinstance(used, list) and extension in used) or (isinstance(required, list) and extension in required)
 
 
 def _accessor_count(document: dict[str, Any], accessor_index: int) -> int:

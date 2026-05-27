@@ -4,8 +4,10 @@ import json
 import struct
 
 import numpy as np
+import pytest
 from typer.testing import CliRunner
 
+from fascat.analysis import analyze_output
 from fascat.asset import Asset, Node, Part
 from fascat.cli import app
 from fascat.io.gltf import validate_gltf
@@ -27,6 +29,9 @@ def _asset() -> Asset:
         root=Node(id="root", name="root", children=[Node(id="tri", name="Triangle", part_id="tri")]),
         parts={"tri": Part(id="tri", name="Triangle", mesh=mesh, material_ids=["mat"])},
         materials={"mat": Material(id="mat", name="Mat", base_color=(0.2, 0.4, 0.6, 1.0))},
+        units="metre",
+        meters_per_unit=1.0,
+        up_axis="Y",
     )
 
 
@@ -47,7 +52,15 @@ def test_gltf_export_options_write_meshopt_extension_and_file_budget(tmp_path) -
         "meshopt": True,
         "textureCompression": "ktx2",
     }
+    assert "KHR_mesh_quantization" in document["extensionsUsed"]
+    assert "KHR_mesh_quantization" in document["extensionsRequired"]
     assert "EXT_meshopt_compression" in document["extensionsUsed"]
+    primitive = document["meshes"][0]["primitives"][0]
+    position_accessor = document["accessors"][primitive["attributes"]["POSITION"]]
+    quantized_node = next(node for node in document["nodes"] if node.get("mesh") == 0)
+    assert position_accessor["componentType"] == 5123
+    assert position_accessor["max"] == [65535, 65535, 0]
+    assert quantized_node["matrix"][0] == pytest.approx(1.0 / 65535.0)
     compressed_views = [
         view["extensions"]["EXT_meshopt_compression"]
         for view in document["bufferViews"]
@@ -56,6 +69,7 @@ def test_gltf_export_options_write_meshopt_extension_and_file_budget(tmp_path) -
     assert compressed_views
     assert {view["mode"] for view in compressed_views} >= {"ATTRIBUTES", "TRIANGLES"}
     assert validate_gltf(output)["triangles"] == 1
+    assert analyze_output(output).parts[0]["bounds"]["max"] == pytest.approx([1.0, 1.0, 0.0])
     assert asset.report.steps[-1].after["file_size_bytes"] > 0
     assert asset.report.steps[-1].after["file_size_budget_bytes"] == 1
     assert "file size budget exceeded" in asset.report.warnings[-1]
