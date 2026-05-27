@@ -138,7 +138,7 @@ fascat inspect input.step --json
 | `--meshopt` | `false` | Write glTF `EXT_meshopt_compression` bufferView payloads with fallback data |
 | `--draco` | `false` | Record glTF Draco compression intent in export metadata |
 | `--texture-compression` | unset | Texture compression intent: `ktx2` or `basisu` |
-| `--package` | `default` | USD package mode: `default` or `usdz` |
+| `--package` | `default` | USD package mode: `default` or packaged `.usdz` |
 | `--file-size-budget-mb` | unset | Warn in reports when output exceeds this size |
 | `--obj-materials / --no-obj-materials` | `true` | Write OBJ material assignments |
 | `--write-mtl / --no-write-mtl` | `true` | Write an OBJ MTL sidecar |

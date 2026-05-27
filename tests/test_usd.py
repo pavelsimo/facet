@@ -10,7 +10,7 @@ from fascat.asset import Asset, Node, Part
 from fascat.io.usd import validate_usd, write_usd
 from fascat.material import Material
 from fascat.mesh import Mesh
-from fascat.options import OptimizeOptions
+from fascat.options import OptimizeOptions, UsdExportOptions
 
 pytestmark = pytest.mark.requires_usd
 pytest.importorskip("pxr")
@@ -209,6 +209,21 @@ def test_usd_export_writes_binary_usdc(tmp_path: Path) -> None:
     write_usd(asset, output)
 
     assert output.read_bytes().startswith(b"PXR-USDC")
+    assert validate_usd(output)["triangles"] == mesh.triangle_count
+
+
+def test_usdz_export_packages_stage_and_validates(tmp_path: Path) -> None:
+    mesh = cube_mesh()
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="Cube", part_id="cube")]),
+        parts={"cube": Part(id="cube", name="Cube", mesh=mesh)},
+        materials={},
+    )
+    output = tmp_path / "cube.usdz"
+
+    asset.write_usd(output, options=UsdExportOptions(package="usdz"))
+
+    assert output.read_bytes()[:2] == b"PK"
     assert validate_usd(output)["triangles"] == mesh.triangle_count
 
 

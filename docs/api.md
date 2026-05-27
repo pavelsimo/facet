@@ -469,7 +469,7 @@ asset.write_obj("motor.obj", options=fc.ObjExportOptions(materials=True, write_m
 asset.write_stl("motor.stl", options=fc.StlExportOptions(binary=True, merge=True))
 ```
 
-`quantize=True` writes `KHR_mesh_quantization` accessors and composes the dequantization transform into referencing nodes. `meshopt=True` writes `EXT_meshopt_compression` bufferView payloads while keeping fallback buffer data for validators and loaders that ignore the extension. Draco and texture compression flags are recorded in glTF extras for downstream packaging. Write report steps include output file size and file-size budget warnings when a budget is provided.
+`quantize=True` writes `KHR_mesh_quantization` accessors and composes the dequantization transform into referencing nodes. `meshopt=True` writes `EXT_meshopt_compression` bufferView payloads while keeping fallback buffer data for validators and loaders that ignore the extension. USDZ output is built by writing a temporary USD stage and packaging it as `.usdz`. Draco and texture compression flags are recorded in glTF extras for downstream packaging. Write report steps include output file size and file-size budget warnings when a budget is provided.
 
 ## Profiles
 

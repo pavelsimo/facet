@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,7 @@ from fascat.options import MetadataExportOptions, UsdExportOptions
 def write_usd(asset: Asset, path: str | Path, *, debug: bool = False, options: UsdExportOptions | None = None) -> None:
     opts = options or UsdExportOptions()
     try:
-        from pxr import Usd, UsdGeom
+        from pxr import Sdf, Usd, UsdGeom, UsdUtils
     except ImportError as exc:
         raise RuntimeError("USD export requires usd-core") from exc
 
@@ -25,6 +26,45 @@ def write_usd(asset: Asset, path: str | Path, *, debug: bool = False, options: U
         raise ValueError("USDZ package export requires a .usdz output path")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    if opts.package == "usdz":
+        _write_usdz_package(asset, output_path, debug, opts, Sdf, Usd, UsdGeom, UsdUtils)
+        return
+    _write_usd_stage(asset, output_path, debug, opts, Usd, UsdGeom)
+
+
+def _write_usdz_package(
+    asset: Asset,
+    output_path: Path,
+    debug: bool,
+    options: UsdExportOptions,
+    Sdf: Any,
+    Usd: Any,
+    UsdGeom: Any,
+    UsdUtils: Any,
+) -> None:
+    with tempfile.TemporaryDirectory(prefix="fascat-usdz-") as directory:
+        package_root = Path(directory)
+        stage_path = package_root / f"{output_path.stem}.usdc"
+        _write_usd_stage(asset, stage_path, debug, options, Usd, UsdGeom)
+        if output_path.exists():
+            output_path.unlink()
+        created = UsdUtils.CreateNewUsdzPackage(
+            Sdf.AssetPath(str(stage_path)),
+            str(output_path),
+            stage_path.name,
+        )
+        if not created:
+            raise RuntimeError(f"failed to create USDZ package: {output_path}")
+
+
+def _write_usd_stage(
+    asset: Asset,
+    output_path: Path,
+    debug: bool,
+    opts: UsdExportOptions,
+    Usd: Any,
+    UsdGeom: Any,
+) -> None:
     stage = Usd.Stage.CreateNew(str(output_path))
     if stage is None:
         raise RuntimeError(f"failed to create USD stage: {output_path}")
