@@ -205,9 +205,16 @@ def _import_warnings(
     header_info: _StepHeaderInfo,
     unsupported_pmi_count: int,
 ) -> list[str]:
+    warnings: list[str] = []
     if options.pmi and unsupported_pmi_count:
-        return ["STEP file advertises AP242 PMI, but PMI entity import is not implemented; annotations are omitted"]
-    return []
+        warnings.append(
+            "STEP file advertises AP242 PMI, but PMI entity import is not implemented; annotations are omitted"
+        )
+    if options.design_variants:
+        warnings.append("STEP design variant import is not implemented; variants are omitted")
+    if options.multi_file:
+        warnings.append("multi-file STEP assembly import is not implemented; external references are not loaded")
+    return warnings
 
 
 def _metadata_count(asset: Asset) -> int:

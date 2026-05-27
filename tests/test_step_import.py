@@ -5,7 +5,14 @@ from pathlib import Path
 import pytest
 
 import fascat as fc
-from fascat.io.step import _canonical_part_id, _material_binding_plan, _shape_fingerprint
+from fascat.io.step import (
+    _canonical_part_id,
+    _import_warnings,
+    _material_binding_plan,
+    _shape_fingerprint,
+    _StepHeaderInfo,
+)
+from fascat.options import StepReadOptions
 
 
 def test_canonical_part_id_reuses_matching_shape_and_material() -> None:
@@ -88,6 +95,20 @@ def test_shape_fingerprint_falls_back_to_python_hash() -> None:
             return 123
 
     assert _shape_fingerprint(ShapeWithoutHashCode()) == "123"
+
+
+def test_step_import_warnings_report_unsupported_import_intent() -> None:
+    warnings = _import_warnings(
+        StepReadOptions(design_variants=True, multi_file=True),
+        _StepHeaderInfo(schema="AP242", pmi_present=True),
+        unsupported_pmi_count=1,
+    )
+
+    assert warnings == [
+        "STEP file advertises AP242 PMI, but PMI entity import is not implemented; annotations are omitted",
+        "STEP design variant import is not implemented; variants are omitted",
+        "multi-file STEP assembly import is not implemented; external references are not loaded",
+    ]
 
 
 @pytest.mark.requires_ocp

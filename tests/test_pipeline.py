@@ -572,6 +572,9 @@ def test_convert_pipeline_file_can_set_import_and_export_metadata(
 [import]
 metadata = "none"
 pmi = false
+design_variants = true
+existing_meshes = false
+multi_file = true
 
 [export]
 metadata = "summary"
@@ -603,6 +606,9 @@ op = "repair"
     assert isinstance(export_options, GltfExportOptions)
     assert import_options.metadata is False
     assert import_options.pmi is False
+    assert import_options.design_variants is True
+    assert import_options.existing_meshes is False
+    assert import_options.multi_file is True
     assert export_options.metadata.mode == "summary"
     assert export_options.metadata.pmi == "none"
     write_step = next(step for step in converted.report.steps if step.name == "write")

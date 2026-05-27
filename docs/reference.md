@@ -110,6 +110,9 @@ all listed formats are implemented.
 | `--atlas-size` | `4096` | Maximum atlas texture size |
 | `--metadata` | `full` | Metadata import/export mode: `none`, `summary`, or `full` |
 | `--pmi` | `metadata` | PMI import/export mode: `none`, `metadata`, or `metadata-and-visuals` |
+| `--design-variants / --no-design-variants` | `false` | Request STEP design variant import; unsupported requests are reported as import warnings |
+| `--import-existing-meshes / --no-import-existing-meshes` | `true` | Prefer existing STEP tessellation payloads when the importer exposes them |
+| `--multi-file-import / --single-file-import` | `false` | Request multi-file STEP assembly reference resolution when supported |
 | `--filter` | unset | Scope optimization and LOD work with a selector such as `path=*/Fasteners/*` |
 | `--exclude-filter` | unset | Exclude selector matches from `--filter` results |
 | `--merge` | `false` | Merge selected geometry before optimization |
@@ -201,6 +204,9 @@ Units and behavior notes:
 | `--profile` | `inspect-only` | Inspection profile to show in output |
 | `--metadata` | `summary` | Metadata output mode: `none`, `summary`, or `full` |
 | `--pmi` | `summary` | PMI output mode: `none`, `summary`, `full`, `metadata`, or `metadata-and-visuals` |
+| `--design-variants / --no-design-variants` | `false` | Request STEP design variant import; unsupported requests are reported as import warnings |
+| `--import-existing-meshes / --no-import-existing-meshes` | `true` | Prefer existing STEP tessellation payloads when the importer exposes them |
+| `--multi-file-import / --single-file-import` | `false` | Request multi-file STEP assembly reference resolution when supported |
 | `--heal-brep` | `false` | Run BREP healing before inspection output |
 | `--heal-tolerance` | `0.05` | BREP healing tolerance |
 | `--remove-sliver-faces` | `false` | Request tiny sliver-face removal during BREP healing; current backend support is limited and reports warnings when unavailable |
@@ -232,6 +238,9 @@ Use `--pipeline` when different assembly branches need different ordered steps.
 [import]
 metadata = "full"
 pmi = true
+design_variants = false
+existing_meshes = true
+multi_file = false
 
 [export]
 metadata = "summary"

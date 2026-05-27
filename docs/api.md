@@ -238,6 +238,9 @@ asset = fc.read_step(
         layers=True,
         validation_properties=True,
         pmi=True,
+        design_variants=False,
+        existing_meshes=True,
+        multi_file=False,
     ),
 )
 
@@ -269,6 +272,9 @@ Metadata and PMI parameters:
 | `StepReadOptions` | `layers` | Import layer assignments as metadata. |
 | `StepReadOptions` | `validation_properties` | Import STEP validation properties such as source counts or checksums when available. |
 | `StepReadOptions` | `pmi` | Import typed PMI records when the backend exposes them; AP242 PMI markers are reported when typed import is unavailable. |
+| `StepReadOptions` | `design_variants` | Request STEP design variant import. Current backend support is limited and reports a warning when requested variants cannot be loaded. |
+| `StepReadOptions` | `existing_meshes` | Prefer existing tessellation payloads from the source file when the importer exposes them. Tessellation `reuse_existing_meshes` still controls whether loaded meshes are retessellated later. |
+| `StepReadOptions` | `multi_file` | Request multi-file STEP assembly import intent. Current single-path imports report a warning instead of silently claiming external references were loaded. |
 | `PmiAnnotation` | `id` | Stable annotation id used for references from parts or mesh groups. |
 | `PmiAnnotation` | `kind` | Annotation type such as `dimension`, `datum`, `tolerance`, `note`, or backend-specific kinds. |
 | `PmiAnnotation` | `text` | Human-readable annotation text. |
@@ -761,6 +767,9 @@ Pipeline files can also define import and export metadata policy:
 [import]
 metadata = "full"
 pmi = true
+design_variants = false
+existing_meshes = true
+multi_file = false
 
 [export]
 metadata = "summary"

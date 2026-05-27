@@ -282,6 +282,9 @@ def test_convert_dry_run_accepts_pipeline_file(tmp_path: Path) -> None:
 [import]
 metadata = "none"
 pmi = false
+design_variants = true
+existing_meshes = false
+multi_file = true
 
 [export]
 metadata = "summary"
@@ -319,6 +322,9 @@ target_triangles = 80000
     assert payload["pipeline"] == str(pipeline_file)
     assert payload["pipeline_import"]["metadata"] is False
     assert payload["pipeline_import"]["pmi"] is False
+    assert payload["pipeline_import"]["design_variants"] is True
+    assert payload["pipeline_import"]["existing_meshes"] is False
+    assert payload["pipeline_import"]["multi_file"] is True
     assert payload["pipeline_export"] == {"mode": "summary", "pmi": "none"}
     assert payload["pipeline_advisories"] == []
     assert payload["pipeline_filters"] == ["fasteners"]

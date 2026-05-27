@@ -75,6 +75,17 @@ preparation tools, normal/orientation controls, material/AO baking, real
 visibility processing, richer decimation controls, staged LOD workflows, and
 final export compression.
 
+Comparison snapshot:
+
+| Area | Fascat today | Missing for closer Unity parity |
+| --- | --- | --- |
+| Import | STEP-centric import with hierarchy, transforms, metadata, colors, repeated-part handling, PMI presence reporting, and existing-mesh reuse during tessellation. | True multi-file/multi-root import semantics, design-variant import, typed/visual PMI, construction point/line cleanup policy, BREP patch cleanup after tessellation, native CAD/JT/IFC/Parasolid/IGES coverage, and per-part loaded-representation reports. |
+| Repair and tessellation | BREP sewing/fix-edge path, mesh duplicate/degenerate cleanup, sag/sag-ratio/angle/max-length controls, free-edge diagnostics, and reusable existing mesh control. | Open-shell grouping, unstitched-face handling, T-junction sewing, non-manifold edge cracking, selectable face/normal orientation strategies, CAD-derived UV modes, targeted tessellation by part/material/metadata/curvature, and optional free-edge geometry output. |
+| Staging | Normal/tangent generation, box/unwrap/lightmap UV modes, UV copy/normalization, UV validation, material normalization, duplicate-material merge, and metadata-only atlas intent. | Unity-style UV0 tileable versus UV1 bake workflows with segmentation, lines of interest, island merge/alignment, repack/padding/share-map controls, distortion and pack-efficiency metrics, material-library mapping, real atlas textures, AO/lightmap baking, and texture cleanup. |
+| Optimization | Mesh simplification, measured error reporting, sampled occlusion removal, exact instance reconstruction, scene merge/split utilities, draw-call estimates, and UV-importance modes. | Global assembly target allocation with iterative memory thresholds, real geometric-error bounded simplification, AO/user-weighted decimation, standard/advanced occlusion backends, retopology/proxy mesh generation, duplicate image/material cleanup, and merge reports that quantify culling, instancing, memory, and file-size tradeoffs. |
+| LODs | LOD ratios, screen-coverage metadata, validation, skipped-part reporting, and glTF `MSFT_lod` metadata. | Occurrence-level LOD group authoring with preserved instance relationships, optimized LOD0 as master asset, far-LOD one-mesh/one-material baking, switching-distance validation, and engine-specific runtime export profiles. |
+| Export | USD/USDZ, glTF/GLB, OBJ, STL, glTF quantization, meshopt, extension reporting, file-size budgets, and rejection of unsupported Draco/KTX2 requests. | Real Draco compression settings, KTX2/Basis texture output, texture resize and PNG/JPEG fallback controls, unused texture cleanup, baseline-versus-optimized size comparisons, Unity/glTFast-oriented profiles, and web/mobile/VR/XR budget presets backed by runtime measurements. |
+
 Parity gaps to track:
 
 1. Workflow validation
@@ -85,7 +96,8 @@ Parity gaps to track:
 
 2. Import controls
    - Reference docs now include a supported-format parity matrix. Unity's baseline covers many CAD and mesh formats; Fascat currently centers on STEP input and USD/glTF/OBJ/STL output, with IGES, Parasolid, JT, native CAD, IFC, 3MF, and QIF explicitly deferred.
-   - Add explicit import toggles for design variants, PMI, product metadata, existing mesh preference, and multi-file imports.
+   - Explicit import toggles now cover product metadata, properties, layers, validation properties, PMI, design variants, existing mesh preference, and multi-file import intent across Python, CLI, and TOML. Unsupported design-variant and multi-file import requests report warnings instead of silently claiming support.
+   - Define true multi-file import semantics: multiple input paths should produce deterministic multi-root assemblies, shared material/image namespaces, stable source-file metadata, and warnings for failed members instead of all-or-nothing failure.
    - Add cleanup operations for free points, line geometry, and post-tessellation BREP patch deletion.
    - Decide whether line geometry should be deleted, preserved as metadata, or tessellated into renderable tubes.
    - Add source-unit, axis/up-vector, and handedness normalization controls so CAD orientation changes are explicit and reported.
@@ -114,6 +126,7 @@ Parity gaps to track:
 5. UV staging
    - Extend existing box UVs into Unity-style AABB projection controls: local versus shared/global AABB, real-world UV scale or `uv3dSize`, destination channel, override policy, and unit reporting.
    - Add UV segmentation and seam planning, including sharp-edge seams and lines of interest.
+   - Add a complete UV workflow model: segment, unwrap, optionally merge islands, align tileable UV0 islands, repack UV1, normalize, validate overlaps, and record which steps ran per channel.
    - Add affine UV island merge and alignment controls for tileable UV0 workflows, including allowed transforms, polygon weighting, and rotation-step quantization.
    - Unwrap solver intent is now accepted across Python, CLI, TOML pipelines, metadata, and reports with `default`, `conformal`, and `isometric` values. The current xatlas backend records non-default solver methods as intent and warns that it cannot enforce them directly.
    - Unwrap iteration and tolerance controls are now accepted across Python, CLI, TOML pipelines, metadata, and reports. Remaining work: add a backend that enforces those controls and reports solver failure or excessive distortion.
@@ -146,6 +159,7 @@ Parity gaps to track:
 8. Decimation parity
    - Add global target allocation across a selected assembly while decimating at part level, so sparse parts stay intact and dense parts carry most of the reduction.
    - Add iterative decimation thresholds, memory-budget warnings, and RAM estimates for large meshes before simplification starts.
+   - Add target-device decimation presets, including XR/HoloLens-style triangle caps, so platform targets can drive simplification before export.
    - Replace quality-criterion heuristics with measured geometric error.
    - Explicit decimation now supports UV importance modes: preserve full UV islands, preserve seam topology only, or ignore UVs by stripping UV/tangent attributes before simplification.
    - Add a pre-decimation cleanup path for unused texture coordinates and report when preserved UVs make simplification less efficient.
@@ -167,6 +181,7 @@ Parity gaps to track:
    - Add a real Draco encoder path with compression level and quantization settings, or keep `draco=True` rejected.
    - Add real KTX2/Basis texture output with quality, compression level, and max-resolution controls.
    - Add export cleanup for unused images/materials and file-size reports broken down by geometry, textures, and metadata.
+   - Add texture-resize preprocessing with before/after dimensions, byte estimates, and per-profile maximums before KTX2/PNG/JPEG export decisions.
    - glTF write reports now list emitted runtime extensions, required extensions, `extras.fascat` metadata, unsupported Draco/KTX2 outputs, and expected runtime support.
    - Add Unity/glTFast-oriented GLB export profiles that combine extension support notes, Draco/KTX2 settings, fallback choices, and runtime compatibility warnings.
    - Add baseline-versus-optimized export comparisons so reports show how much each preparation step changed file size, and warn when draw-call merging increases export size by breaking instancing.
@@ -178,6 +193,7 @@ Parity gaps to track:
 11. Platform budgets
    - Desktop, WebGL/web, mobile, and VR profiles now include documented target-FPS, triangle, vertex, per-mesh vertex/index-buffer, texture-resolution, texture-memory, estimated load-time, and draw-call budgets.
    - Conversion reports now include a `profile_budget` step for selected-profile budget status and warnings when output exceeds profile triangle, vertex, per-mesh vertex/index-buffer, texture-resolution, texture-memory, estimated load-time, or draw-call budgets.
+   - Add XR/AR device profiles and custom target-device overrides so budgets can model device-specific caps instead of only broad desktop/web/mobile/VR classes.
    - The platform-budget checklist is complete at diagnostic-report level; future work is measured engine/runtime load profiling.
 
 ## Near-Term Polish

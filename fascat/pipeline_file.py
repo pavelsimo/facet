@@ -54,7 +54,19 @@ _SUPPORTED_STEP_OPS = frozenset(
 )
 
 _TOP_LEVEL_KEYS = frozenset({"import", "export", "filters", "steps"})
-_IMPORT_KEYS = frozenset({"metadata", "product_metadata", "properties", "layers", "validation_properties", "pmi"})
+_IMPORT_KEYS = frozenset(
+    {
+        "metadata",
+        "product_metadata",
+        "properties",
+        "layers",
+        "validation_properties",
+        "pmi",
+        "design_variants",
+        "existing_meshes",
+        "multi_file",
+    }
+)
 _EXPORT_KEYS = frozenset({"metadata", "pmi"})
 _FILTER_KEYS = frozenset(
     {
@@ -568,6 +580,9 @@ def _import_options(value: object, location: _TomlLocation | None = None) -> Ste
             layers=bool(value.get("layers", metadata_enabled)),
             validation_properties=bool(value.get("validation_properties", metadata_enabled)),
             pmi=_pmi_import_enabled(value.get("pmi", True)),
+            design_variants=bool(value.get("design_variants", False)),
+            existing_meshes=bool(value.get("existing_meshes", True)),
+            multi_file=bool(value.get("multi_file", False)),
         )
     except ValueError as exc:
         message = str(exc)

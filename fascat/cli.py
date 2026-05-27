@@ -334,6 +334,24 @@ def cmd_inspect(
         PmiMode,
         typer.Option("--pmi", help="PMI output mode: none, summary, full, metadata, or metadata-and-visuals."),
     ] = PmiMode.SUMMARY,
+    design_variants: Annotated[
+        bool,
+        typer.Option("--design-variants/--no-design-variants", help="Request STEP design variant import."),
+    ] = False,
+    import_existing_meshes: Annotated[
+        bool,
+        typer.Option(
+            "--import-existing-meshes/--no-import-existing-meshes",
+            help="Prefer existing STEP tessellation payloads when the importer exposes them.",
+        ),
+    ] = True,
+    multi_file_import: Annotated[
+        bool,
+        typer.Option(
+            "--multi-file-import/--single-file-import",
+            help="Request multi-file STEP assembly reference resolution when supported.",
+        ),
+    ] = False,
     heal_brep: Annotated[bool, typer.Option("--heal-brep", help="Run BREP healing before inspection output.")] = False,
     heal_tolerance: Annotated[float, typer.Option("--heal-tolerance", help="BREP healing tolerance.")] = 0.05,
     remove_sliver_faces: Annotated[
@@ -361,6 +379,9 @@ def cmd_inspect(
         "profile": profile.value,
         "metadata": metadata.value,
         "pmi": pmi.value,
+        "design_variants": design_variants,
+        "import_existing_meshes": import_existing_meshes,
+        "multi_file_import": multi_file_import,
         "heal_brep": heal_brep,
         "heal_tolerance": heal_tolerance,
         "remove_sliver_faces": remove_sliver_faces,
@@ -379,7 +400,13 @@ def cmd_inspect(
         _emit(ctx, payload, f"Would inspect {input_path} with profile {profile.value}.")
         return
 
-    import_options = _step_read_options(metadata, pmi)
+    import_options = _step_read_options(
+        metadata,
+        pmi,
+        design_variants=design_variants,
+        existing_meshes=import_existing_meshes,
+        multi_file=multi_file_import,
+    )
     asset = _read_step_for_cli(input_path, ctx, payload, import_options=import_options)
     if heal_brep:
         asset = asset.heal_brep(
@@ -615,6 +642,24 @@ def cmd_convert(
         PmiMode,
         typer.Option("--pmi", help="PMI import/export mode: none, metadata, or metadata-and-visuals."),
     ] = PmiMode.METADATA,
+    design_variants: Annotated[
+        bool,
+        typer.Option("--design-variants/--no-design-variants", help="Request STEP design variant import."),
+    ] = False,
+    import_existing_meshes: Annotated[
+        bool,
+        typer.Option(
+            "--import-existing-meshes/--no-import-existing-meshes",
+            help="Prefer existing STEP tessellation payloads when the importer exposes them.",
+        ),
+    ] = True,
+    multi_file_import: Annotated[
+        bool,
+        typer.Option(
+            "--multi-file-import/--single-file-import",
+            help="Request multi-file STEP assembly reference resolution when supported.",
+        ),
+    ] = False,
     merge: Annotated[bool, typer.Option("--merge", help="Merge selected geometry before optimization.")] = False,
     merge_mode: Annotated[MergeMode, typer.Option("--merge-mode", help="Merge grouping mode.")] = MergeMode.ALL,
     keep_parent: Annotated[
@@ -948,6 +993,9 @@ def cmd_convert(
         "atlas_size": atlas_size,
         "metadata": metadata.value,
         "pmi": pmi.value,
+        "design_variants": design_variants,
+        "import_existing_meshes": import_existing_meshes,
+        "multi_file_import": multi_file_import,
         "merge": merge,
         "merge_mode": merge_mode.value,
         "keep_parent": keep_parent,
@@ -1239,7 +1287,13 @@ def cmd_convert(
         import_options = (
             pipeline_spec.import_options
             if pipeline_spec and pipeline_spec.import_options
-            else _step_read_options(metadata, pmi)
+            else _step_read_options(
+                metadata,
+                pmi,
+                design_variants=design_variants,
+                existing_meshes=import_existing_meshes,
+                multi_file=multi_file_import,
+            )
         )
         export_metadata = (
             pipeline_spec.export_metadata
@@ -1872,7 +1926,14 @@ def _parse_filter_options(
     raise AssertionError("unreachable")
 
 
-def _step_read_options(metadata: MetadataMode, pmi: PmiMode) -> StepReadOptions:
+def _step_read_options(
+    metadata: MetadataMode,
+    pmi: PmiMode,
+    *,
+    design_variants: bool = False,
+    existing_meshes: bool = True,
+    multi_file: bool = False,
+) -> StepReadOptions:
     metadata_enabled = metadata != MetadataMode.NONE
     pmi_enabled = pmi != PmiMode.NONE
     return StepReadOptions(
@@ -1882,6 +1943,9 @@ def _step_read_options(metadata: MetadataMode, pmi: PmiMode) -> StepReadOptions:
         layers=metadata_enabled,
         validation_properties=metadata_enabled,
         pmi=pmi_enabled,
+        design_variants=design_variants,
+        existing_meshes=existing_meshes,
+        multi_file=multi_file,
     )
 
 

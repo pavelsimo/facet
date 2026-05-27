@@ -147,6 +147,9 @@ class StepReadOptions:
     layers: bool = True
     validation_properties: bool = True
     pmi: bool = True
+    design_variants: bool = False
+    existing_meshes: bool = True
+    multi_file: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
