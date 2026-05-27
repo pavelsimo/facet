@@ -343,3 +343,50 @@ def test_tessellate_cache_respects_per_part_settings_and_records_quality(monkeyp
     assert part_b_payload["options"]["sag"] == 0.25
     assert part_b_payload["options"]["sag_ratio"] == 0.01
     assert part_b_payload["options"]["max_edge_length"] == 0.75
+
+
+def test_tessellation_quality_report_uses_max_polygon_length(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import fascat.ops.tessellate as tessellate_module
+
+    source_shape = object()
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="Part", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", source_shape=source_shape)},
+    )
+
+    def fake_tessellate_shape(shape: object, _options: Tessellation, **_kwargs: object) -> Mesh:
+        assert shape is source_shape
+        return triangle_mesh()
+
+    monkeypatch.setattr(tessellate_module, "tessellate_shape", fake_tessellate_shape)
+
+    tessellated = asset.tessellate(Tessellation(quality_report=True, max_edge_length=5.0, max_polygon_length=0.5))
+    payload = json.loads(str(tessellated.parts["part"].metadata["tessellation_quality"]))
+
+    assert payload["options"]["max_edge_length"] == 5.0
+    assert payload["options"]["max_polygon_length"] == 0.5
+    assert payload["metrics"]["long_edges"] == 3
+    assert tessellated.parts["part"].metadata["tessellation_long_polygon_edges"] == "3"
+    assert tessellated.report.steps[-1].warnings == [
+        "part has 3 tessellated edges longer than max_polygon_length: Part"
+    ]
+
+
+def test_tessellation_max_polygon_length_warns_without_quality_report(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import fascat.ops.tessellate as tessellate_module
+
+    source_shape = object()
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="Part", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", source_shape=source_shape)},
+    )
+
+    monkeypatch.setattr(tessellate_module, "tessellate_shape", lambda *_args, **_kwargs: triangle_mesh())
+
+    tessellated = asset.tessellate(Tessellation(max_polygon_length=0.5))
+
+    assert "tessellation_quality" not in tessellated.parts["part"].metadata
+    assert tessellated.parts["part"].metadata["tessellation_long_polygon_edges"] == "3"
+    assert tessellated.report.steps[-1].warnings == [
+        "part has 3 tessellated edges longer than max_polygon_length: Part"
+    ]

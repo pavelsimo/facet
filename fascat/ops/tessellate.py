@@ -51,8 +51,16 @@ def tessellate_asset(asset: Asset, options: Tessellation, *, selected_part_ids: 
         else:
             part.mesh = cached_mesh.copy()
         part.fingerprint = part.mesh.fingerprint()
+        metrics = None
         if part_options.quality_report:
-            _store_quality_report(part, part_options)
+            metrics = _store_quality_report(part, part_options)
+        elif part_options.max_polygon_length is not None:
+            metrics = part.mesh.quality_metrics(
+                min_edge_length=part_options.min_edge_length,
+                max_edge_length=part_options.max_polygon_length,
+            )
+        if part_options.max_polygon_length is not None:
+            _warn_long_polygons(result, part, part_options, metrics)
         if not part_options.keep_brep:
             part.source_shape = None
     if selected_part_ids is not None:
@@ -203,12 +211,12 @@ def _apply_mesh_tessellation_controls(mesh: Mesh, options: Tessellation) -> Mesh
     return result
 
 
-def _store_quality_report(part: Part, options: Tessellation) -> None:
+def _store_quality_report(part: Part, options: Tessellation) -> dict[str, int | float] | None:
     if part.mesh is None:
-        return
+        return None
     metrics = part.mesh.quality_metrics(
         min_edge_length=options.min_edge_length,
-        max_edge_length=options.max_edge_length,
+        max_edge_length=_quality_max_edge_length(options),
     )
     payload = {
         "part_id": part.id,
@@ -222,6 +230,26 @@ def _store_quality_report(part: Part, options: Tessellation) -> None:
     part.metadata["tessellation_long_edges"] = str(metrics["long_edges"])
     part.metadata["tessellation_skinny_triangles"] = str(metrics["skinny_triangles"])
     part.mesh.metadata["tessellation_quality"] = encoded
+    return metrics
+
+
+def _quality_max_edge_length(options: Tessellation) -> float | None:
+    return options.max_polygon_length if options.max_polygon_length is not None else options.max_edge_length
+
+
+def _warn_long_polygons(
+    asset: Asset,
+    part: Part,
+    options: Tessellation,
+    metrics: dict[str, int | float] | None,
+) -> None:
+    if metrics is None or options.max_polygon_length is None:
+        return
+    long_edges = int(metrics["long_edges"])
+    part.metadata["tessellation_long_polygon_edges"] = str(long_edges)
+    part.metadata["tessellation_max_polygon_length"] = str(options.max_polygon_length)
+    if long_edges > 0:
+        asset.report.add_warning(f"part has {long_edges} tessellated edges longer than max_polygon_length: {part.name}")
 
 
 def _tessellation_mesh_options(options: Tessellation) -> dict[str, object]:
@@ -249,6 +277,7 @@ def _tessellation_settings_key(options: Tessellation) -> tuple[object, ...]:
         options.relative,
         options.min_edge_length,
         options.max_edge_length,
+        options.max_polygon_length,
         options.preserve_boundaries,
         options.curvature_adaptive,
         options.avoid_skinny_triangles,

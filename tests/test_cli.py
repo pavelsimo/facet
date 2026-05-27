@@ -116,6 +116,7 @@ def test_convert_help() -> None:
     assert "--pipeline" in plain(result.output)
     assert "--min-edge-length" in plain(result.output)
     assert "--max-edge-length" in plain(result.output)
+    assert "--max-polygon-length" in plain(result.output)
     assert "--quality-report" in plain(result.output)
     assert "--materials" in plain(result.output)
     assert "--material-mode" in plain(result.output)
@@ -167,6 +168,7 @@ def test_convert_dry_run_json() -> None:
     assert payload["command"] == "convert"
     assert payload["dry_run"] is True
     assert payload["sag_ratio"] == 0.01
+    assert payload["max_polygon_length"] is None
     assert payload["reuse_existing_meshes"] is True
     diagnostics = {item["operation"]: item for item in payload["operation_diagnostics"]}
     assert diagnostics["import"]["level"] == "exact"
@@ -250,6 +252,7 @@ op = "tessellate"
 where = "fasteners"
 sag = 0.2
 sag-ratio = 0.01
+max-polygon-length = 3.0
 reuse-existing-meshes = false
 
 [[steps]]
@@ -274,6 +277,7 @@ target_triangles = 80000
     assert payload["pipeline_filters"] == ["fasteners"]
     assert [step["op"] for step in payload["pipeline_steps"]] == ["tessellate", "optimize"]
     assert payload["pipeline_steps"][0]["sag_ratio"] == 0.01
+    assert payload["pipeline_steps"][0]["max_polygon_length"] == 3.0
     assert payload["pipeline_steps"][0]["reuse_existing_meshes"] is False
 
 
@@ -773,6 +777,7 @@ def test_convert_writes_tessellation_quality_report(monkeypatch, tmp_path: Path)
         assert isinstance(tessellation, fc.Tessellation)
         assert tessellation.sag_ratio == 0.02
         assert tessellation.min_edge_length == 0.01
+        assert tessellation.max_polygon_length == 3.0
         assert tessellation.avoid_skinny_triangles is True
         assert tessellation.quality_report is True
         assert tessellation.reuse_existing_meshes is False
@@ -788,6 +793,8 @@ def test_convert_writes_tessellation_quality_report(monkeypatch, tmp_path: Path)
             str(output_file),
             "--min-edge-length",
             "0.01",
+            "--max-polygon-length",
+            "3.0",
             "--sag-ratio",
             "0.02",
             "--retessellate-existing-meshes",
@@ -983,6 +990,12 @@ def test_convert_rejects_invalid_max_edge_length(capsys) -> None:  # type: ignor
     result = invoke_run(["--dry-run", "convert", "input.step", "output.usdc", "--max-edge-length", "0"], capsys)
     assert result.exit_code == 2
     assert "--max-edge-length must be greater than 0" in result.stderr
+
+
+def test_convert_rejects_invalid_max_polygon_length(capsys) -> None:  # type: ignore[no-untyped-def]
+    result = invoke_run(["--dry-run", "convert", "input.step", "output.usdc", "--max-polygon-length", "0"], capsys)
+    assert result.exit_code == 2
+    assert "--max-polygon-length must be greater than 0" in result.stderr
 
 
 def test_convert_rejects_invalid_min_edge_length(capsys) -> None:  # type: ignore[no-untyped-def]

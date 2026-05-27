@@ -20,6 +20,7 @@ asset = asset.tessellate(
         relative=True,
         min_edge_length=None,
         max_edge_length=None,
+        max_polygon_length=None,
         reuse_existing_meshes=True,
         preserve_boundaries=True,
         curvature_adaptive=False,
@@ -336,6 +337,7 @@ asset = fc.read_step("motor.step").tessellate(
         angle=10.0,
         min_edge_length=0.02,
         max_edge_length=2.0,
+        max_polygon_length=4.0,
         preserve_boundaries=True,
         curvature_adaptive=True,
         avoid_skinny_triangles=True,
@@ -363,6 +365,7 @@ Tessellation parameters:
 | `relative` | Compatibility switch for interpreting `sag` as a relative backend deflection when `sag_ratio` is unset. Prefer `sag_ratio` for new relative-tolerance workflows. |
 | `min_edge_length` | Collapse or avoid edges shorter than this length during post-processing. |
 | `max_edge_length` | Split long triangle edges to keep mesh density bounded. |
+| `max_polygon_length` | Report tessellated polygon edges longer than this threshold without subdividing geometry. Quality reports count these as `long_edges`; the tessellation step emits warnings when exceeded. |
 | `preserve_boundaries` | Preserve CAD face and boundary edges during tessellation cleanup. |
 | `curvature_adaptive` | Request curvature-aware meshing from the backend when available. |
 | `avoid_skinny_triangles` | Run a cleanup pass that reduces long skinny triangles. |

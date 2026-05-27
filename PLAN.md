@@ -100,7 +100,7 @@ Parity gaps to track:
    - Existing imported meshes now have an explicit `reuse_existing_meshes` control across Python, CLI, TOML pipelines, per-part overrides, and reports. The default preserves imported meshes; disabling it retessellates from source BREP where available.
    - Investigate CAD-parametric UV and tangent generation during tessellation, plus free-edge extraction for diagnostics.
    - Add targeted tessellation profiles by part size, material, metadata, curvature, or filter so shiny/high-detail parts can use finer criteria than bulk structural parts.
-   - Expose max polygon length separately from cleanup subdivision and report when long triangles may cause lighting artifacts.
+   - Max polygon length is now exposed separately from cleanup subdivision. `max_edge_length` still subdivides geometry; `max_polygon_length` drives quality-report `long_edges`, metadata, and warnings for long tessellated edges that may cause lighting artifacts.
 
 5. UV staging
    - Add UV segmentation and seam planning, including sharp-edge seams and lines of interest.

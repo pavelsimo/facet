@@ -443,6 +443,10 @@ def cmd_convert(
         float | None,
         typer.Option("--max-edge-length", help="Split tessellated triangles longer than this length."),
     ] = None,
+    max_polygon_length: Annotated[
+        float | None,
+        typer.Option("--max-polygon-length", help="Report tessellated polygon edges longer than this length."),
+    ] = None,
     min_edge_length: Annotated[
         float | None,
         typer.Option("--min-edge-length", help="Collapse tessellated edges shorter than this length."),
@@ -848,6 +852,7 @@ def cmd_convert(
         "target_triangles": target_triangles,
         "ratio": ratio,
         "max_edge_length": max_edge_length,
+        "max_polygon_length": max_polygon_length,
         "min_edge_length": min_edge_length,
         "preserve_boundaries": preserve_boundaries,
         "curvature_adaptive": curvature_adaptive,
@@ -990,6 +995,8 @@ def cmd_convert(
         _fail(ctx, payload, "--min-edge-length must be greater than 0.", code=2)
     if max_edge_length is not None and max_edge_length <= 0.0:
         _fail(ctx, payload, "--max-edge-length must be greater than 0.", code=2)
+    if max_polygon_length is not None and max_polygon_length <= 0.0:
+        _fail(ctx, payload, "--max-polygon-length must be greater than 0.", code=2)
     if min_edge_length is not None and max_edge_length is not None and min_edge_length > max_edge_length:
         _fail(ctx, payload, "--min-edge-length must be less than or equal to --max-edge-length.", code=2)
     if heal_tolerance <= 0.0:
@@ -1102,6 +1109,9 @@ def cmd_convert(
             angle=angle if angle is not None else base_tessellation.angle,
             min_edge_length=min_edge_length if min_edge_length is not None else base_tessellation.min_edge_length,
             max_edge_length=max_edge_length if max_edge_length is not None else base_tessellation.max_edge_length,
+            max_polygon_length=max_polygon_length
+            if max_polygon_length is not None
+            else base_tessellation.max_polygon_length,
             preserve_boundaries=preserve_boundaries,
             curvature_adaptive=curvature_adaptive,
             avoid_skinny_triangles=avoid_skinny_triangles,

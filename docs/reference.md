@@ -50,6 +50,7 @@ Dry-run JSON for `convert` includes `operation_diagnostics`, a list of planned o
 | `--ratio` | unset | Simplification ratio when no triangle target is set |
 | `--min-edge-length` | unset | Collapse tessellated edges shorter than this length |
 | `--max-edge-length` | profile value | Split tessellated triangles longer than this length |
+| `--max-polygon-length` | unset | Report tessellated polygon edges longer than this length without subdividing geometry |
 | `--preserve-boundaries / --no-preserve-boundaries` | `true` | Preserve sharp/boundary edges during tessellation cleanup |
 | `--curvature-adaptive` | `false` | Use tighter interior meshing on curved CAD faces |
 | `--avoid-skinny-triangles` | `false` | Refine long skinny triangles after tessellation |
@@ -155,7 +156,7 @@ Dry-run JSON for `convert` includes `operation_diagnostics`, a list of planned o
 
 Units and behavior notes:
 
-- Linear tolerances and sizes such as `--sag`, `--min-edge-length`, `--max-edge-length`, `--heal-tolerance`, `--max-sliver-area`, `--region-size`, and `--max-hole-diameter` use the source asset's working units unless the option explicitly says otherwise.
+- Linear tolerances and sizes such as `--sag`, `--min-edge-length`, `--max-edge-length`, `--max-polygon-length`, `--heal-tolerance`, `--max-sliver-area`, `--region-size`, and `--max-hole-diameter` use the source asset's working units unless the option explicitly says otherwise.
 - Angles such as `--angle`, `--normal-tolerance`, and `--hard-edge-angle` are degrees.
 - Ratios such as `--ratio`, `--lods`, and decimation target ratios are fractions between `0` and `1`; LOD ratios must be sorted from highest to lowest detail.
 - Screen coverage values are fractions between `0` and `1`; file-size budgets are megabytes; atlas and bake sizes are pixels.
@@ -222,6 +223,7 @@ op = "tessellate"
 where = "large_castings"
 sag = 0.03
 sag-ratio = 0.005
+max-polygon-length = 5.0
 reuse-existing-meshes = false
 angle = 10.0
 
@@ -258,7 +260,7 @@ warnings to distinguish exact work from fallbacks.
 |------------|---------------|----------------------|-----------|
 | STEP import, hierarchy, names, transforms, colors, metadata | Implemented for STEP | `import` report stats and pipeline import options; AP242 PMI markers warn when typed PMI import is unavailable | Add design variants, typed PMI entity extraction, existing mesh preference, and multi-file import |
 | BREP healing | Partial | `heal_brep`; records open shells, free/unstitched edges, small edges, and sliver counts; sliver removal warns that the backend leaves shapes unchanged | Implement sliver-face removal, duplicate-face cleanup, and deeper face/wire repair |
-| Tessellation | Implemented | `tessellate` report options, explicit sag-ratio, existing mesh reuse/retessellation controls, and quality metadata | Add CAD UV/tangent extraction and free-edge diagnostics |
+| Tessellation | Implemented | `tessellate` report options, explicit sag-ratio, existing mesh reuse/retessellation controls, max-polygon-length diagnostics, and quality metadata | Add CAD UV/tangent extraction and free-edge diagnostics |
 | Mesh repair | Implemented for core cleanup | `repair` report step; mesh metadata records before/after duplicate polygon, degenerate triangle, boundary edge, and non-manifold edge counts | Add T-junction sewing, non-manifold cracking, and configurable orientation strategies |
 | Staging, normals, tangents, UV metadata | Partial | `stage` report step; tangents require UV0; mesh metadata records UV bounds, degenerates, and overlap counts, with warnings for UV1/lightmap bake violations | Add seam planning, unwrap method selection, repack, normalize, and deeper per-channel validation |
 | Material baking | Approximate | `bake_materials` emits constant embedded texture maps from material factors and warns that raster baking is not implemented | Generate real atlas textures from source texture/material inputs |

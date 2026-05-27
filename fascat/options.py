@@ -48,6 +48,7 @@ _TESSELLATION_PART_SETTING_KEYS = {
     "relative",
     "min_edge_length",
     "max_edge_length",
+    "max_polygon_length",
     "preserve_boundaries",
     "curvature_adaptive",
     "avoid_skinny_triangles",
@@ -78,6 +79,7 @@ class Tessellation:
     relative: bool = True
     min_edge_length: float | None = None
     max_edge_length: float | None = None
+    max_polygon_length: float | None = None
     preserve_boundaries: bool = True
     curvature_adaptive: bool = False
     avoid_skinny_triangles: bool = False
@@ -98,6 +100,8 @@ class Tessellation:
             raise ValueError("min_edge_length must be greater than 0 when set")
         if self.max_edge_length is not None and self.max_edge_length <= 0.0:
             raise ValueError("max_edge_length must be greater than 0 when set")
+        if self.max_polygon_length is not None and self.max_polygon_length <= 0.0:
+            raise ValueError("max_polygon_length must be greater than 0 when set")
         if (
             self.min_edge_length is not None
             and self.max_edge_length is not None

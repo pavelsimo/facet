@@ -66,6 +66,7 @@ def test_lod_options_normalize_list_ratios() -> None:
         (lambda: fc.Tessellation(angle=181), "angle"),
         (lambda: fc.Tessellation(min_edge_length=0), "min_edge_length"),
         (lambda: fc.Tessellation(max_edge_length=0), "max_edge_length"),
+        (lambda: fc.Tessellation(max_polygon_length=0), "max_polygon_length"),
         (lambda: fc.Tessellation(min_edge_length=2, max_edge_length=1), "min_edge_length"),
         (lambda: fc.Tessellation(part_settings={"part": {"bad": True}}), "unsupported part_settings"),
         (lambda: fc.RepairOptions(tolerance=-1), "tolerance"),
