@@ -752,7 +752,7 @@ asset.write_obj("motor.obj", options=fc.ObjExportOptions(materials=True, write_m
 asset.write_stl("motor.stl", options=fc.StlExportOptions(binary=True, merge=True))
 ```
 
-`quantize=True` writes `KHR_mesh_quantization` accessors and composes the dequantization transform into referencing nodes. `meshopt=True` writes `EXT_meshopt_compression` bufferView payloads while keeping fallback buffer data for validators and loaders that ignore the extension. USDZ output is built by writing a temporary USD stage and packaging it as `.usdz`. Texture compression flags are recorded in glTF extras for downstream packaging. Draco compression is not implemented yet, and `draco=True` raises instead of silently writing an uncompressed file. Write report steps include output file size and file-size budget warnings when a budget is provided.
+`quantize=True` writes `KHR_mesh_quantization` accessors and composes the dequantization transform into referencing nodes. `meshopt=True` writes `EXT_meshopt_compression` bufferView payloads while keeping fallback buffer data for validators and loaders that ignore the extension. USDZ output is built by writing a temporary USD stage and packaging it as `.usdz`. Draco and texture compression are not implemented yet, so `draco=True` and `texture_compression="ktx2"` or `"basisu"` raise instead of silently writing uncompressed runtime payloads. Write report steps include output file size and file-size budget warnings when a budget is provided.
 
 OBJ export writes vertex positions, normals, `f v//vn` face references, material assignments, and smoothing directives. Staged smooth normals export with smoothing enabled; flat, hard-edge, or generated face normals export with smoothing disabled.
 
@@ -763,7 +763,7 @@ Export option parameters:
 | `GltfExportOptions` | `quantize` | Write `KHR_mesh_quantization` accessors and dequantization transforms. |
 | `GltfExportOptions` | `meshopt` | Write `EXT_meshopt_compression` payloads with fallback uncompressed data. |
 | `GltfExportOptions` | `draco` | Unsupported until a Draco encoder backend is integrated; `True` raises `ValueError`. |
-| `GltfExportOptions` | `texture_compression` | Record `ktx2` or `basisu` texture-compression intent. |
+| `GltfExportOptions` | `texture_compression` | Unsupported until a KTX2/Basis encoder and texture packaging backend is integrated; non-`None` values raise `ValueError`. |
 | `GltfExportOptions` | `file_size_budget_mb` | Add report warnings when the output exceeds this size. |
 | `GltfExportOptions` | `metadata` | `MetadataExportOptions` controlling metadata and PMI in `extras.fascat`. |
 | `UsdExportOptions` | `package` | `default` writes normal USD. `usdz` writes a packaged `.usdz` file. |

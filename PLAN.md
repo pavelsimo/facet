@@ -197,10 +197,10 @@ These need more design and should not be mixed into documentation or diagnostics
    - Shared repeated parts are still copied only when a selected occurrence must be isolated from unmatched occurrences.
    - Remaining polish: reduce the operation-level full copy for selected part edits, add memory/time benchmarks, and consider streaming or lazy mesh payloads for heavy STEP imports.
 
-8. Runtime compression
-   - Add a real Draco backend only if there is a reliable Python encoder path.
-   - Treat texture compression as a packaging step with emitted files, not metadata-only intent.
-   - Add KTX2/Basis output only after texture assets are real files in the export graph.
+8. Runtime compression - unsupported texture compression now rejected
+   - Draco remains rejected until a reliable encoder backend is integrated.
+   - KTX2/Basis texture compression is now rejected instead of recorded as metadata-only intent.
+   - Remaining polish: add real KTX2/Basis output only after texture assets are real files in the export graph, and add a Draco path only if a reliable Python encoder exists.
 
 9. UV pipeline depth
    - Add seam segmentation, unwrap method selection, island merging, packing, normalization, and overlap checks.

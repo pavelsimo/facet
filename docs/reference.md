@@ -139,7 +139,7 @@ Dry-run JSON for `convert` includes `operation_diagnostics`, a list of planned o
 | `--quantize` | `false` | Write glTF `KHR_mesh_quantization` accessors and node dequantization transforms |
 | `--meshopt` | `false` | Write glTF `EXT_meshopt_compression` bufferView payloads with fallback data |
 | `--draco` | `false` | Unsupported until a Draco encoder backend is integrated |
-| `--texture-compression` | unset | Texture compression intent: `ktx2` or `basisu`; no compressed texture files are written yet |
+| `--texture-compression` | unset | Unsupported until a KTX2/Basis encoder and texture packaging backend is integrated |
 | `--package` | `default` | USD package mode: `default` or packaged `.usdz` |
 | `--file-size-budget-mb` | unset | Warn in reports when output exceeds this size |
 | `--obj-materials / --no-obj-materials` | `true` | Write OBJ material assignments |
@@ -262,7 +262,7 @@ warnings to distinguish exact work from fallbacks.
 | Occlusion removal | Approximate | `remove_occluded` warns that sampled visibility may require higher precision for thin occluders | Add acceleration structures, measured confidence, and raster/GPU backends for high-poly production scenes |
 | Decimation | Partial | `decimate`; quality criterion records measured vertex error but still uses a ratio heuristic | Enforce geometric error bounds and add topology protection metrics, iterative limits, and UV/AO importance modes |
 | LOD generation | Partial | `run_lod_generators` / `lods` report steps | Preserve occurrence-level LOD chains and add far-LOD merge plus validation |
-| Runtime compression | Partial | glTF quantization and meshopt are implemented; texture compression is metadata-only; Draco is rejected | Add real KTX2/Basis output and a Draco path only if a reliable encoder is integrated |
+| Runtime compression | Partial | glTF quantization and meshopt are implemented; Draco and texture compression are rejected until real encoders are integrated | Add real KTX2/Basis output and a Draco path only if reliable encoders are integrated |
 | Export and budgets | Implemented for USD, USDZ, glTF/GLB, OBJ, STL | `write` report includes file size and optional budget warnings | Add geometry/texture/metadata size breakdowns and export cleanup for unused resources |
 | PMI metadata export | Partial | glTF `extras.fascat` and USD `customData` include PMI records and resolve links through `source_part_ids` after merge/replace | Add visual annotation geometry for `metadata_and_visuals` |
 

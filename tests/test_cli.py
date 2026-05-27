@@ -185,8 +185,6 @@ def test_convert_dry_run_reports_approximate_and_metadata_only_operations() -> N
             "quality",
             "--remove-holes",
             "--remove-occluded",
-            "--texture-compression",
-            "ktx2",
         ],
     )
 
@@ -199,7 +197,6 @@ def test_convert_dry_run_reports_approximate_and_metadata_only_operations() -> N
     assert diagnostics["decimate"]["level"] == "approximate"
     assert diagnostics["remove_holes"]["level"] == "approximate"
     assert diagnostics["remove_occluded"]["level"] == "approximate"
-    assert diagnostics["texture_compression"]["level"] == "metadata_only"
 
 
 def test_convert_dry_run_defaults_output_to_usdc() -> None:

@@ -1048,6 +1048,13 @@ def cmd_convert(
         _fail(ctx, payload, "--lod-tiny-part-screen-size must be greater than or equal to 0.", code=2)
     if texture_compression not in {None, "ktx2", "basisu"}:
         _fail(ctx, payload, "--texture-compression must be one of: ktx2, basisu.", code=2)
+    if texture_compression is not None:
+        _fail(
+            ctx,
+            payload,
+            "--texture-compression is not supported because no KTX2/Basis encoder backend is integrated.",
+            code=2,
+        )
     if draco:
         _fail(ctx, payload, "--draco is not supported because no Draco encoder backend is integrated.", code=2)
     if file_size_budget_mb is not None and file_size_budget_mb <= 0.0:
@@ -1620,12 +1627,6 @@ def _convert_operation_diagnostics(payload: dict[str, Any]) -> list[dict[str, st
         add("run_lod_generators", "exact", "preset or explicit LOD levels are generated from optimized meshes")
     elif payload["lods"] is not None:
         add("lods", "exact", "ratio-based LOD meshes are generated from optimized meshes")
-    if payload["texture_compression"] is not None:
-        add(
-            "texture_compression",
-            "metadata_only",
-            "texture compression intent is recorded; compressed textures are not written",
-        )
     add(
         "export",
         "exact",

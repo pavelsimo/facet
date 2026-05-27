@@ -569,8 +569,6 @@ def _apply_export_options(document: dict[str, Any], options: GltfExportOptions) 
         compression["meshopt"] = True
     if options.draco:
         compression["draco"] = True
-    if options.texture_compression is not None:
-        compression["textureCompression"] = options.texture_compression
     if compression:
         fascat_extras["compression"] = compression
 

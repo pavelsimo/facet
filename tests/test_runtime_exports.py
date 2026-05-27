@@ -39,18 +39,12 @@ def test_gltf_export_options_write_meshopt_extension_and_file_budget(tmp_path) -
     asset = _asset()
     output = tmp_path / "triangle.gltf"
 
-    asset.write_gltf(
-        output,
-        options=GltfExportOptions(
-            quantize=True, meshopt=True, texture_compression="ktx2", file_size_budget_mb=0.000001
-        ),
-    )
+    asset.write_gltf(output, options=GltfExportOptions(quantize=True, meshopt=True, file_size_budget_mb=0.000001))
 
     document = json.loads(output.read_text(encoding="utf-8"))
     assert document["extras"]["fascat"]["compression"] == {
         "quantize": True,
         "meshopt": True,
-        "textureCompression": "ktx2",
     }
     assert "KHR_mesh_quantization" in document["extensionsUsed"]
     assert "KHR_mesh_quantization" in document["extensionsRequired"]
@@ -189,6 +183,25 @@ def test_cli_convert_rejects_unsupported_draco_option_during_dry_run() -> None:
     assert result.exit_code == 2
     payload = json.loads(result.output)
     assert "draco" in payload["error"]
+
+
+def test_cli_convert_rejects_unsupported_texture_compression_during_dry_run() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "--dry-run",
+            "convert",
+            "input.step",
+            "output.glb",
+            "--texture-compression",
+            "ktx2",
+        ],
+    )
+
+    assert result.exit_code == 2
+    payload = json.loads(result.output)
+    assert "texture-compression" in payload["error"]
 
 
 def test_cli_validate_writes_geometry_quality_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
