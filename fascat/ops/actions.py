@@ -96,11 +96,12 @@ def decimate_asset(
     selected_part_ids: set[str] | None = None,
 ) -> Asset:
     source_meshes = _source_meshes(asset, selected_part_ids)
+    working_asset = _prepare_decimation_asset(asset, options, selected_part_ids)
     if options.budget_scope == "selection":
         from fascat.ops.optimize import optimize_asset
 
         result = optimize_asset(
-            asset,
+            working_asset,
             OptimizeOptions(
                 target_triangles=options.target_triangles,
                 ratio=_decimate_ratio(options),
@@ -111,7 +112,7 @@ def decimate_asset(
                 hard_edge_angle=options.normal_tolerance,
                 preserve_holes=options.protect_topology,
                 preserve_material_boundaries=True,
-                preserve_uv_seams=True,
+                preserve_uv_seams=_preserve_uv_seams(options),
                 preserve_silhouette=options.protect_topology,
             ),
             selected_part_ids=selected_part_ids,
@@ -120,10 +121,11 @@ def decimate_asset(
         if options.criterion == "quality":
             result.report.add_warning(_quality_decimation_warning())
         _enforce_triangle_budget(result, options, selected_part_ids=selected_part_ids)
+        _finalize_decimation_uv_importance(result, options, selected_part_ids=selected_part_ids)
         _annotate_decimation_result(result, source_meshes, options, selected_part_ids=selected_part_ids)
         return result
 
-    result = asset.copy(keep_source=True)
+    result = working_asset.copy(keep_source=True)
     ratio = _decimate_ratio(options)
     _warn_aggressive_lod0_decimation(result, source_meshes, options)
     if options.criterion == "quality":
@@ -143,17 +145,19 @@ def decimate_asset(
             hard_edge_angle=options.normal_tolerance,
             preserve_holes=options.protect_topology,
             preserve_material_boundaries=True,
-            preserve_uv_seams=True,
+            preserve_uv_seams=_preserve_uv_seams(options),
             preserve_silhouette=options.protect_topology,
         )
         mesh = mesh.optimize_buffers().repair()
         target_budget = target if target is not None else _ratio_target(part.mesh, ratio)
         if target_budget is not None and mesh.triangle_count > target_budget:
             mesh = _sample_mesh_faces(mesh, target_budget).compute_normals()
+        mesh = _finalize_decimated_mesh_uvs(mesh, options)
         mesh.metadata = {
             **mesh.metadata,
             "decimate_criterion": options.criterion,
             "decimate_budget_scope": options.budget_scope,
+            "decimate_uv_importance": options.uv_importance,
         }
         mesh.validate()
         part.mesh = mesh
@@ -468,6 +472,60 @@ def _decimate_ratio(options: DecimateOptions) -> float | None:
     return 0.5
 
 
+def _preserve_uv_seams(options: DecimateOptions) -> bool:
+    return options.uv_importance in {"preserve_islands", "preserve_seams"}
+
+
+def _prepare_decimation_asset(
+    asset: Asset,
+    options: DecimateOptions,
+    selected_part_ids: set[str] | None,
+) -> Asset:
+    if options.uv_importance != "ignore":
+        return asset
+    result = asset.copy(keep_source=True)
+    for part in result.parts.values():
+        if selected_part_ids is not None and part.id not in selected_part_ids:
+            continue
+        if part.mesh is None:
+            continue
+        part.mesh = _mesh_without_texture_coordinates(part.mesh)
+        part.fingerprint = part.mesh.fingerprint()
+    return result
+
+
+def _finalize_decimation_uv_importance(
+    asset: Asset,
+    options: DecimateOptions,
+    *,
+    selected_part_ids: set[str] | None,
+) -> None:
+    if options.uv_importance == "preserve_islands":
+        return
+    for part in asset.parts.values():
+        if selected_part_ids is not None and part.id not in selected_part_ids:
+            continue
+        if part.mesh is None:
+            continue
+        part.mesh = _finalize_decimated_mesh_uvs(part.mesh, options)
+        part.fingerprint = part.mesh.fingerprint()
+
+
+def _finalize_decimated_mesh_uvs(mesh: Mesh, options: DecimateOptions) -> Mesh:
+    if options.uv_importance == "preserve_islands":
+        return mesh
+    return _mesh_without_texture_coordinates(mesh)
+
+
+def _mesh_without_texture_coordinates(mesh: Mesh) -> Mesh:
+    if not mesh.uvs and mesh.tangents is None:
+        return mesh
+    result = mesh.copy()
+    result.uvs = {}
+    result.tangents = None
+    return result
+
+
 def _quality_decimation_warning() -> str:
     return (
         "decimate quality criterion maps tolerances to a target ratio and records measured vertex error; "
@@ -537,6 +595,7 @@ def _annotate_decimation_result(
             **part.metadata,
             "decimate_criterion": options.criterion,
             "decimate_budget_scope": options.budget_scope,
+            "decimate_uv_importance": options.uv_importance,
             "decimate_source_triangles": str(metrics.source_triangles),
             "decimate_output_triangles": str(metrics.output_triangles),
             "decimate_triangle_reduction": f"{metrics.triangle_reduction:.9g}",
@@ -544,6 +603,9 @@ def _annotate_decimation_result(
             "decimate_mean_vertex_error": f"{metrics.mean_vertex_error:.9g}",
             "decimate_error_metric": "symmetric_vertex_nearest_distance",
         }
+        removed_uv_channels = sorted(set(source.uvs) - set(part.mesh.uvs))
+        if removed_uv_channels:
+            part.metadata["decimate_removed_uv_channels"] = ",".join(str(channel) for channel in removed_uv_channels)
     if source_total == 0:
         return
     reduction = (source_total - output_total) / source_total
@@ -556,6 +618,17 @@ def _annotate_decimation_result(
     asset.metadata["decimate_max_vertex_error"] = f"{max_error:.9g}"
     asset.metadata["decimate_mean_vertex_error"] = f"{(weighted_error / measured_parts):.9g}"
     asset.metadata["decimate_error_metric"] = "symmetric_vertex_nearest_distance"
+    asset.metadata["decimate_uv_importance"] = options.uv_importance
+    removed_asset_uv_channels: set[int] = set()
+    for part_id, source in source_meshes.items():
+        output_part = asset.parts.get(part_id)
+        if output_part is None or output_part.mesh is None:
+            continue
+        removed_asset_uv_channels.update(channel for channel in source.uvs if channel not in output_part.mesh.uvs)
+    if removed_asset_uv_channels:
+        asset.metadata["decimate_removed_uv_channels"] = ",".join(
+            str(channel) for channel in sorted(removed_asset_uv_channels)
+        )
 
 
 def _decimation_metrics(source: Mesh, output: Mesh) -> _DecimationMetrics:

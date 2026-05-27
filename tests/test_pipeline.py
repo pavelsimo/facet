@@ -199,6 +199,7 @@ def test_asset_operation_reports_include_options_and_before_after_counts() -> No
             "protect_topology",
             "preserve_painted_areas",
             "budget_scope",
+            "uv_importance",
         },
         "remove_holes": {"through", "blind", "surface", "max_diameter", "prefer_brep"},
         "remove_occluded": {
@@ -347,6 +348,11 @@ def test_pipeline_validates_step_options_during_parse() -> None:
         match=r"pipeline step 1 \(tessellate\): tessellation sag must be greater than 0",
     ):
         PipelineSpec.from_dict({"steps": [{"op": "tessellate", "sag": 0.0}]})
+    with pytest.raises(
+        ValueError,
+        match=r"pipeline step 1 \(decimate\): uv_importance",
+    ):
+        PipelineSpec.from_dict({"steps": [{"op": "decimate", "uv_importance": "bad"}]})
 
 
 def test_pipeline_advises_unity_style_ordering() -> None:

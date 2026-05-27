@@ -574,6 +574,7 @@ asset = asset.decimate(
         uv_tolerance=0.01,
         protect_topology=True,
         budget_scope="selection",
+        uv_importance="preserve_islands",
     )
 )
 
@@ -592,7 +593,7 @@ asset = asset.run_lod_generators(
 )
 ```
 
-Material baking currently creates a shared flat material and constant embedded texture maps from material factors; it does not rasterize source textures into atlases. Hole removal uses deterministic mesh boundary classification and filling when BREP feature editing is unavailable. Occlusion removal uses deterministic visibility sampling, so the report records that thin occluders can require higher precision and asset metadata records the measured sample coverage, direction coverage, and confidence score. Decimation records `decimate_requested_keep_ratio` metadata when a requested ratio can be derived, and warns when the request keeps less than 20% of source triangles because those settings are usually appropriate for distant LODs rather than close-view LOD0 assets.
+Material baking currently creates a shared flat material and constant embedded texture maps from material factors; it does not rasterize source textures into atlases. Hole removal uses deterministic mesh boundary classification and filling when BREP feature editing is unavailable. Occlusion removal uses deterministic visibility sampling, so the report records that thin occluders can require higher precision and asset metadata records the measured sample coverage, direction coverage, and confidence score. Decimation records `decimate_requested_keep_ratio` metadata when a requested ratio can be derived, and warns when the request keeps less than 20% of source triangles because those settings are usually appropriate for distant LODs rather than close-view LOD0 assets. `uv_importance="ignore"` strips UV/tangent attributes before simplification; `"preserve_seams"` uses UVs for seam preservation and then strips them; `"preserve_islands"` keeps UVs through the output.
 
 Optimization action parameters:
 
@@ -614,6 +615,7 @@ Optimization action parameters:
 | `DecimateOptions` | `protect_topology` | Avoid topology changes that would remove important boundaries. |
 | `DecimateOptions` | `preserve_painted_areas` | Preserve metadata-marked or painted regions where present. |
 | `DecimateOptions` | `budget_scope` | `part` budgets each part separately. `selection` lets dense selected parts absorb more reduction. |
+| `DecimateOptions` | `uv_importance` | Texture-coordinate handling: `preserve_islands` keeps UVs, `preserve_seams` protects seam topology then drops UVs, and `ignore` strips UVs/tangents before decimation. |
 | `RemoveHolesOptions` | `through`, `blind`, `surface` | Hole-type filters for boundary-loop classification. `through` matches paired aligned openings, `blind` matches open pocket mouths, and `surface` matches remaining surface openings. |
 | `RemoveHolesOptions` | `max_diameter` | Only fill detected open boundary loops at or below the measured planar-span diameter. |
 | `RemoveHolesOptions` | `prefer_brep` | Request BREP-level feature removal. Current implementation warns and uses mesh boundary classification and filling. |

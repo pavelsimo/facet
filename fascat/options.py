@@ -29,6 +29,7 @@ InstancePolicy = Literal["auto", "preserve", "expand"]
 BakeMaterialMap = Literal["base_color", "opacity", "normal", "roughness", "metallic", "ao", "emissive"]
 DecimateCriterion = Literal["target", "quality"]
 BudgetScope = Literal["part", "selection"]
+DecimateUVImportance = Literal["preserve_islands", "preserve_seams", "ignore"]
 HoleType = Literal["through", "blind", "surface"]
 OcclusionStrategy = Literal["conservative", "exterior", "advanced"]
 OcclusionLevel = Literal["parts", "submeshes", "triangles"]
@@ -475,6 +476,7 @@ class DecimateOptions:
     protect_topology: bool = True
     preserve_painted_areas: bool = False
     budget_scope: BudgetScope = "selection"
+    uv_importance: DecimateUVImportance = "preserve_islands"
 
     def __post_init__(self) -> None:
         if self.criterion not in {"target", "quality"}:
@@ -494,6 +496,8 @@ class DecimateOptions:
             raise ValueError("normal_tolerance must be greater than 0 and no more than 180")
         if self.budget_scope not in {"part", "selection"}:
             raise ValueError("budget_scope must be one of: part, selection")
+        if self.uv_importance not in {"preserve_islands", "preserve_seams", "ignore"}:
+            raise ValueError("uv_importance must be one of: preserve_islands, preserve_seams, ignore")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

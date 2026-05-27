@@ -131,6 +131,7 @@ def test_convert_help() -> None:
     assert "--index-buffer" in plain(result.output)
     assert "--bake-materials" in plain(result.output)
     assert "--decimate" in plain(result.output)
+    assert "--uv-importance" in plain(result.output)
     assert "--sag-ratio" in plain(result.output)
     assert "--reuse-existing-meshes" in plain(result.output)
     assert "--free-edge-report" in plain(result.output)

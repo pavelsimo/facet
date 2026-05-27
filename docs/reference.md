@@ -119,6 +119,7 @@ Dry-run JSON for `convert` includes `operation_diagnostics`, a list of planned o
 | `--uv-tolerance` | unset | UV deviation tolerance metadata for decimation |
 | `--protect-topology / --no-protect-topology` | `true` | Preserve topology-sensitive faces during decimation |
 | `--budget-scope` | `selection` | Decimation budget scope: `part` or `selection` |
+| `--uv-importance` | `preserve-islands` | Decimation UV handling: preserve islands, preserve seams, or ignore UVs |
 | `--remove-holes` | `false` | Remove small open hole loops with mesh boundary classification |
 | `--hole-types` | `through,blind,surface` | Boundary hole types to remove |
 | `--max-hole-diameter` | `3.0` | Maximum planar-span hole diameter to remove |
@@ -166,6 +167,7 @@ Units and behavior notes:
 - Explicit decimation requests that keep less than 20% of source triangles emit an LOD0 distortion warning. Use those aggressive ratios primarily for distant LODs unless visual validation says otherwise.
 - Screen coverage values are fractions between `0` and `1`; file-size budgets are megabytes; atlas and bake sizes are pixels.
 - `--decimate-criterion quality` maps tolerances to a target ratio, records measured nearest-vertex error and achieved triangle reduction, and reports a warning because tolerance bounds are not enforced.
+- `--uv-importance ignore` strips UV/tangent attributes before simplification; `preserve-seams` uses UVs for seam preservation and then strips them; `preserve-islands` keeps UVs through the output.
 - `--remove-holes` uses mesh boundary classification and filling when BREP hole removal is unavailable. `--hole-types` filters inferred through, blind, and surface boundary loops; closed BREP feature holes still require a BREP feature backend.
 - `--remove-occluded` uses deterministic sampled visibility. Strategy changes the direction set, `--hemi-evaluation` restricts rays to upper-hemisphere and side views, and `--occlusion-level` controls whether fully hidden parts, material groups, or triangles are removed. Output metadata records sample coverage, direction coverage, and an occlusion confidence score.
 - `--draco` is rejected until a Draco encoder backend is integrated.
@@ -272,7 +274,7 @@ warnings to distinguish exact work from fallbacks.
 | Material baking | Approximate | `bake_materials` emits constant embedded texture maps from material factors and warns that raster baking is not implemented | Generate real atlas textures from source texture/material inputs |
 | Hole removal | Approximate | `remove_holes` warns when it falls back to mesh boundary classification and filling | Add BREP feature-level removal for closed cylindrical and pocket holes |
 | Occlusion removal | Approximate | `remove_occluded` warns that sampled visibility may require higher precision and records candidate counts, sampled face coverage, direction coverage, and confidence metadata | Add acceleration structures and optional raster/GPU backends for high-poly production scenes |
-| Decimation | Partial | `decimate`; quality criterion records measured vertex error but still uses a ratio heuristic, and aggressive LOD0 ratios emit distortion warnings | Enforce geometric error bounds and add topology protection metrics, iterative limits, and UV/AO importance modes |
+| Decimation | Partial | `decimate`; quality criterion records measured vertex error but still uses a ratio heuristic, aggressive LOD0 ratios emit distortion warnings, and UV importance modes control seam preservation or UV cleanup | Enforce geometric error bounds and add topology protection metrics, iterative limits, and AO/user-weight importance modes |
 | LOD generation | Partial | `run_lod_generators` / `lods` report steps | Preserve occurrence-level LOD chains and add far-LOD merge plus validation |
 | Instance reconstruction | Partial | `optimize_scene` reconstructs exact matching mesh fingerprints when vertex attributes, material assignments, and metadata match; metadata records reconstructed part/occurrence counts and vertex/triangle savings | Add tolerance-based similarity detection and richer file-size savings estimates |
 | Runtime compression | Partial | glTF quantization and meshopt are implemented; Draco and texture compression are rejected until real encoders are integrated | Add real KTX2/Basis output and a Draco path only if reliable encoders are integrated |

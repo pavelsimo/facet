@@ -99,6 +99,7 @@ def test_lod_options_normalize_list_ratios() -> None:
         (lambda: fc.BakeMaterialOptions(bake=("bad",)), "unsupported bake maps"),
         (lambda: fc.DecimateOptions(target_ratio=1.0), "target_ratio"),
         (lambda: fc.DecimateOptions(normal_tolerance=0.0), "normal_tolerance"),
+        (lambda: fc.DecimateOptions(uv_importance="bad"), "uv_importance"),
         (lambda: fc.RemoveHolesOptions(through=False, blind=False, surface=False), "hole type"),
         (lambda: fc.RemoveOccludedOptions(precision=0), "precision"),
         (lambda: fc.LODLevel(screen_coverage=0.0, target_ratio=0.5), "screen_coverage"),

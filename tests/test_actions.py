@@ -32,6 +32,18 @@ def _triangle_strip(count: int) -> Mesh:
     return Mesh(points=np.asarray(points, dtype=float), faces=np.asarray(faces, dtype=int))
 
 
+def _triangle_strip_with_uvs(count: int) -> Mesh:
+    mesh = _triangle_strip(count)
+    mesh.uvs[0] = np.column_stack(
+        (
+            np.linspace(0.0, 1.0, mesh.vertex_count),
+            np.zeros(mesh.vertex_count),
+        )
+    )
+    mesh.tangents = np.tile(np.asarray([1.0, 0.0, 0.0, 1.0], dtype=float), (mesh.vertex_count, 1))
+    return mesh
+
+
 def _cube_mesh(scale: float = 1.0) -> Mesh:
     points = np.asarray(
         [
@@ -215,6 +227,31 @@ def test_quality_decimate_records_measured_error_metrics() -> None:
     assert int(part.metadata["decimate_output_triangles"]) < 8
     assert float(part.metadata["decimate_triangle_reduction"]) > 0.0
     assert "measured vertex error" in decimated.report.steps[-1].warnings[0]
+
+
+def test_decimate_uv_importance_controls_texture_coordinate_cleanup() -> None:
+    cases = (
+        ("preserve_islands", True, None),
+        ("preserve_seams", False, "0"),
+        ("ignore", False, "0"),
+    )
+    for mode, keeps_uvs, removed_channels in cases:
+        asset = Asset(
+            root=Node(id="root", name="root", children=[Node(id="body", name="Body", part_id="body")]),
+            parts={"body": Part(id="body", name="Body", mesh=_triangle_strip_with_uvs(6))},
+        )
+
+        decimated = asset.decimate(DecimateOptions(target_ratio=0.5, uv_importance=mode))  # type: ignore[arg-type]
+        mesh = decimated.parts["body"].mesh
+
+        assert mesh is not None
+        assert (0 in mesh.uvs) is keeps_uvs
+        if not keeps_uvs:
+            assert mesh.tangents is None
+            assert decimated.parts["body"].metadata["decimate_removed_uv_channels"] == removed_channels
+            assert decimated.metadata["decimate_removed_uv_channels"] == removed_channels
+        assert decimated.parts["body"].metadata["decimate_uv_importance"] == mode
+        assert decimated.metadata["decimate_uv_importance"] == mode
 
 
 def test_remove_holes_fills_small_boundary_loop() -> None:
@@ -530,6 +567,8 @@ def test_cli_convert_accepts_optimization_action_options_during_dry_run() -> Non
             "0.01",
             "--budget-scope",
             "selection",
+            "--uv-importance",
+            "ignore",
             "--remove-holes",
             "--hole-types",
             "through,blind,surface",
@@ -566,6 +605,7 @@ def test_cli_convert_accepts_optimization_action_options_during_dry_run() -> Non
     assert payload["bake_materials"] is True
     assert payload["bake"] == ["base_color", "opacity"]
     assert payload["decimate"] is True
+    assert payload["uv_importance"] == "ignore"
     assert payload["remove_holes"] is True
     assert payload["remove_occluded"] is True
     assert payload["run_lod_generators"] is True

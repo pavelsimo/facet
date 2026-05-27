@@ -196,6 +196,12 @@ class BudgetScope(str, Enum):
     SELECTION = "selection"
 
 
+class UVImportance(str, Enum):
+    PRESERVE_ISLANDS = "preserve-islands"
+    PRESERVE_SEAMS = "preserve-seams"
+    IGNORE = "ignore"
+
+
 class OcclusionStrategy(str, Enum):
     CONSERVATIVE = "conservative"
     EXTERIOR = "exterior"
@@ -697,6 +703,10 @@ def cmd_convert(
         BudgetScope,
         typer.Option("--budget-scope", help="Decimation budget scope: part or selection."),
     ] = BudgetScope.SELECTION,
+    uv_importance: Annotated[
+        UVImportance,
+        typer.Option("--uv-importance", help="Decimation UV importance: preserve-islands, preserve-seams, or ignore."),
+    ] = UVImportance.PRESERVE_ISLANDS,
     remove_holes: Annotated[
         bool,
         typer.Option("--remove-holes", help="Remove small hole features with mesh fallback."),
@@ -940,6 +950,7 @@ def cmd_convert(
         "uv_tolerance": uv_tolerance,
         "protect_topology": protect_topology,
         "budget_scope": budget_scope.value,
+        "uv_importance": uv_importance.value,
         "remove_holes": remove_holes,
         "hole_types": hole_types,
         "max_hole_diameter": max_hole_diameter,
@@ -1282,6 +1293,7 @@ def cmd_convert(
                 uv_tolerance=uv_tolerance,
                 protect_topology=protect_topology,
                 budget_scope=budget_scope.value,
+                uv_importance=cast(Any, uv_importance.value.replace("-", "_")),
             )
             if decimate
             else None
