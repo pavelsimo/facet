@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,7 @@ def stats_with_file_size(
         **estimates,
         "export_estimated_payload_bytes": sum(estimates.values()),
         **export_material_counts(asset),
+        **export_image_counts(asset),
     }
     if budget_mb is not None:
         budget_bytes = int(budget_mb * 1_000_000)
@@ -58,6 +60,22 @@ def export_material_counts(asset: Any) -> dict[str, int]:
         "export_referenced_material_count": len(referenced),
         "export_unused_material_count": max(0, len(asset.materials) - len(referenced)),
         "export_written_material_count": len(referenced),
+    }
+
+
+def export_image_counts(asset: Any) -> dict[str, int]:
+    source_uris = _texture_data_uris(asset.materials.values())
+    referenced_uris = _texture_data_uris(referenced_materials(asset).values())
+    source_unique = set(source_uris)
+    referenced_unique = set(referenced_uris)
+    return {
+        "export_source_image_count": len(source_unique),
+        "export_source_image_reference_count": len(source_uris),
+        "export_referenced_image_count": len(referenced_unique),
+        "export_referenced_image_reference_count": len(referenced_uris),
+        "export_unused_image_count": len(source_unique - referenced_unique),
+        "export_duplicate_image_reference_count": max(0, len(referenced_uris) - len(referenced_unique)),
+        "export_written_image_count": len(referenced_unique),
     }
 
 
@@ -110,13 +128,17 @@ def _mesh_payload_bytes(mesh: Mesh) -> int:
 
 
 def _texture_bytes(asset: Any) -> int:
-    total = 0
-    for material in asset.materials.values():
+    return sum(_data_uri_payload_bytes(uri) for uri in set(_texture_data_uris(referenced_materials(asset).values())))
+
+
+def _texture_data_uris(materials: Iterable[Any]) -> list[str]:
+    uris: list[str] = []
+    for material in materials:
         for key in _TEXTURE_URI_METADATA_KEYS:
             value = material.metadata.get(key)
-            if isinstance(value, str):
-                total += _data_uri_payload_bytes(value)
-    return total
+            if isinstance(value, str) and value.startswith("data:image/"):
+                uris.append(value)
+    return uris
 
 
 def _data_uri_payload_bytes(value: str) -> int:

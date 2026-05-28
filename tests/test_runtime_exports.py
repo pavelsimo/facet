@@ -97,7 +97,12 @@ def test_gltf_export_options_write_meshopt_extension_and_file_budget(tmp_path) -
 
 def test_exports_prune_unused_materials_and_report_counts(tmp_path) -> None:  # type: ignore[no-untyped-def]
     gltf_asset = _asset()
-    gltf_asset.materials["unused"] = Material(id="unused", name="Unused", base_color=(1.0, 0.0, 0.0, 1.0))
+    gltf_asset.materials["unused"] = Material(
+        id="unused",
+        name="Unused",
+        base_color=(1.0, 0.0, 0.0, 1.0),
+        metadata={"baked_texture_base_color_uri": "data:image/png;base64,VU5VU0VE"},
+    )
     gltf_output = tmp_path / "used.gltf"
 
     gltf_asset.write_gltf(gltf_output)
@@ -105,10 +110,17 @@ def test_exports_prune_unused_materials_and_report_counts(tmp_path) -> None:  # 
     after = gltf_asset.report.steps[-1].after
 
     assert [material["name"] for material in document["materials"]] == ["Mat"]
+    assert "images" not in document
     assert after["export_source_material_count"] == 2
     assert after["export_referenced_material_count"] == 1
     assert after["export_unused_material_count"] == 1
     assert after["export_written_material_count"] == 1
+    assert after["export_source_image_count"] == 1
+    assert after["export_referenced_image_count"] == 0
+    assert after["export_unused_image_count"] == 1
+    assert after["export_duplicate_image_reference_count"] == 0
+    assert after["export_written_image_count"] == 0
+    assert after["export_estimated_texture_bytes"] == 0
 
     obj_asset = _asset()
     obj_asset.materials["unused"] = Material(id="unused", name="Unused", base_color=(1.0, 0.0, 0.0, 1.0))
@@ -119,6 +131,58 @@ def test_exports_prune_unused_materials_and_report_counts(tmp_path) -> None:  # 
 
     assert "newmtl mat" in mtl
     assert "newmtl unused" not in mtl
+
+
+def test_gltf_export_deduplicates_referenced_texture_images_and_reports_counts(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    shared_uri = "data:image/png;base64,QUJD"
+    unused_uri = "data:image/png;base64,VU5VU0VE"
+    mesh = Mesh(
+        points=np.asarray([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]], dtype=float),
+        faces=np.asarray([[0, 1, 2], [2, 1, 3]], dtype=int),
+        material_indices=np.asarray([0, 1], dtype=int),
+    )
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="quad", name="Quad", part_id="quad")]),
+        parts={"quad": Part(id="quad", name="Quad", mesh=mesh, material_ids=["red", "blue"])},
+        materials={
+            "red": Material(
+                id="red",
+                name="Red",
+                base_color=(1.0, 0.0, 0.0, 1.0),
+                metadata={"baked_texture_base_color_uri": shared_uri},
+            ),
+            "blue": Material(
+                id="blue",
+                name="Blue",
+                base_color=(0.0, 0.0, 1.0, 1.0),
+                metadata={"baked_texture_base_color_uri": shared_uri},
+            ),
+            "unused": Material(
+                id="unused",
+                name="Unused",
+                base_color=(0.0, 1.0, 0.0, 1.0),
+                metadata={"baked_texture_base_color_uri": unused_uri},
+            ),
+        },
+    )
+    output = tmp_path / "dedup.gltf"
+
+    asset.write_gltf(output)
+    document = json.loads(output.read_text(encoding="utf-8"))
+    after = asset.report.steps[-1].after
+
+    assert [image["uri"] for image in document["images"]] == [shared_uri]
+    assert document["textures"] == [{"source": 0}]
+    assert document["materials"][0]["pbrMetallicRoughness"]["baseColorTexture"]["index"] == 0
+    assert document["materials"][1]["pbrMetallicRoughness"]["baseColorTexture"]["index"] == 0
+    assert after["export_source_image_count"] == 2
+    assert after["export_source_image_reference_count"] == 3
+    assert after["export_referenced_image_count"] == 1
+    assert after["export_referenced_image_reference_count"] == 2
+    assert after["export_unused_image_count"] == 1
+    assert after["export_duplicate_image_reference_count"] == 1
+    assert after["export_written_image_count"] == 1
+    assert after["export_estimated_texture_bytes"] == 3
 
 
 def test_write_report_estimates_geometry_texture_and_metadata_payloads(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -145,6 +209,10 @@ def test_write_report_estimates_geometry_texture_and_metadata_payloads(tmp_path)
         + after["export_estimated_texture_bytes"]
         + after["export_estimated_metadata_bytes"]
     )
+    assert after["export_source_image_count"] == 1
+    assert after["export_referenced_image_count"] == 1
+    assert after["export_duplicate_image_reference_count"] == 0
+    assert after["export_written_image_count"] == 1
     texture_policy = runtime_dependencies["runtime_decision_matrix"]["textures"]
     assert texture_policy["ktx2_basisu"]["state"] == "unsupported"
     assert texture_policy["png_jpeg_fallbacks"]["state"] == "source_textures_present"
