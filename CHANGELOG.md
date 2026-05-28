@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-28
+
 ### Added
 - add import controls for product metadata, PMI, design variants, existing-mesh preference, multi-file intent, and construction-only cleanup of free vertices and lines, with import-decision and per-part loaded-representation reports
 - add source unit, up-axis, and handedness normalization that applies a root transform and records it in import metadata
@@ -20,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - add desktop, web, mobile, VR, AR, and MR platform budgets with Unity reference ranges, custom target-device profile overlays, and named workflow recipes
 - add conversion reporting with dry-run operation classification, pipeline ordering advisories, workflow-summary, preflight, and conversion-manifest steps, pipeline TOML validation, and analysis reports for topology, slivers, tiny parts, draw calls, and self-intersections
 - add expanded API parameter docs, a Unity capability matrix, and a supported-format parity matrix
+- show live per-stage conversion progress with an animated spinner and elapsed timing on interactive terminals, plain step lines on non-interactive streams, and a one-line completion summary
 
 ### Changed
 - **breaking:** rename the `Tessellation` options dataclass to `TessellationOptions` for consistency with the other `*Options` classes; update callers to `fc.TessellationOptions(...)` (low impact pre-1.0 with no published consumers)
@@ -39,5 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - improve CLI behavior for help, color handling, quiet mode, backend failures, and validation errors
 - keep asset, mesh, material, report, and node models isolated from caller-owned mutable inputs
 
-[Unreleased]: https://github.com/pavelsimo/fascat/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/pavelsimo/fascat/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/pavelsimo/fascat/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pavelsimo/fascat/releases/tag/v0.1.0
