@@ -11,7 +11,7 @@
   <a href="https://deepwiki.com/pavelsimo/fascat"><img src="https://img.shields.io/badge/DeepWiki-0088cc?style=flat-square&logoColor=white" alt="DeepWiki"></a>
 </p>
 
-Fascat is a Python library and CLI for converting CAD data into realtime-ready OpenUSD and glTF assets.
+Fascat is a Python library and CLI for converting CAD data into RT3D assets.
 
 ```mermaid
 flowchart TD
