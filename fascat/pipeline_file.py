@@ -147,7 +147,7 @@ _MERGE_VERTICES_KEYS = frozenset(
         "area_epsilon",
     }
 )
-_DELETE_DEGENERATE_POLYGONS_KEYS = frozenset({"area_epsilon"})
+_DELETE_DEGENERATE_POLYGONS_KEYS = frozenset({"area_epsilon", "delete_duplicates"})
 _BREP_HEAL_KEYS = frozenset(
     {
         "tolerance",
@@ -848,7 +848,10 @@ def _merge_vertices_options(values: dict[str, object]) -> MergeVerticesOptions:
 
 
 def _delete_degenerate_polygons_options(values: dict[str, object]) -> DeleteDegeneratePolygonsOptions:
-    return DeleteDegeneratePolygonsOptions(area_epsilon=_as_float(values.get("area_epsilon", 1e-12)))
+    return DeleteDegeneratePolygonsOptions(
+        area_epsilon=_as_float(values.get("area_epsilon", 1e-12)),
+        delete_duplicates=bool(values.get("delete_duplicates", True)),
+    )
 
 
 def _brep_heal_options(values: dict[str, object]) -> BrepHealOptions:

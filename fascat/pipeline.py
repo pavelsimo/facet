@@ -1622,12 +1622,16 @@ def delete_degenerate_polygons(
     *,
     options: DeleteDegeneratePolygonsOptions | None = None,
     area_epsilon: float | None = None,
+    delete_duplicates: bool = True,
     where: Filter | None = None,
 ) -> Asset:
     if options is not None:
         return asset.delete_degenerate_polygons(options, where=where)
     return asset.delete_degenerate_polygons(
-        DeleteDegeneratePolygonsOptions(area_epsilon=1e-12 if area_epsilon is None else area_epsilon),
+        DeleteDegeneratePolygonsOptions(
+            area_epsilon=1e-12 if area_epsilon is None else area_epsilon,
+            delete_duplicates=delete_duplicates,
+        ),
         where=where,
     )
 

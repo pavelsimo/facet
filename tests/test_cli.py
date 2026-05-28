@@ -262,6 +262,7 @@ def test_convert_dry_run_reports_delete_degenerate_polygons_operation() -> None:
             "--delete-degenerate-polygons",
             "--degenerate-area-epsilon",
             "0.00001",
+            "--keep-duplicate-polygons",
         ],
     )
 
@@ -270,6 +271,7 @@ def test_convert_dry_run_reports_delete_degenerate_polygons_operation() -> None:
     diagnostics = {item["operation"]: item for item in payload["operation_diagnostics"]}
     assert payload["delete_degenerate_polygons"] is True
     assert payload["degenerate_area_epsilon"] == 0.00001
+    assert payload["delete_duplicate_polygons"] is False
     assert diagnostics["delete_degenerate_polygons"]["level"] == "exact"
 
 

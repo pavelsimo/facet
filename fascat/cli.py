@@ -752,6 +752,13 @@ def cmd_convert(
         float,
         typer.Option("--degenerate-area-epsilon", help="Area threshold for standalone degenerate polygon cleanup."),
     ] = 1e-12,
+    delete_duplicate_polygons: Annotated[
+        bool,
+        typer.Option(
+            "--delete-duplicate-polygons/--keep-duplicate-polygons",
+            help="Delete exact duplicate polygons during standalone degenerate polygon cleanup.",
+        ),
+    ] = True,
     texel_density: Annotated[
         float | None,
         typer.Option("--texel-density", help="UV texel density metadata for unwrap and atlas workflows."),
@@ -1217,6 +1224,7 @@ def cmd_convert(
         "merge_vertex_area_epsilon": merge_vertex_area_epsilon,
         "delete_degenerate_polygons": delete_degenerate_polygons,
         "degenerate_area_epsilon": degenerate_area_epsilon,
+        "delete_duplicate_polygons": delete_duplicate_polygons,
         "texel_density": texel_density,
         "uv_padding": uv_padding,
         "max_stretch": max_stretch,
@@ -1577,7 +1585,10 @@ def cmd_convert(
             else None
         )
         delete_degenerate_polygons_options = (
-            DeleteDegeneratePolygonsOptions(area_epsilon=degenerate_area_epsilon)
+            DeleteDegeneratePolygonsOptions(
+                area_epsilon=degenerate_area_epsilon,
+                delete_duplicates=delete_duplicate_polygons,
+            )
             if delete_degenerate_polygons
             else None
         )
@@ -2069,7 +2080,7 @@ def _convert_operation_diagnostics(payload: dict[str, Any]) -> list[dict[str, st
         add(
             "delete_degenerate_polygons",
             "exact",
-            "degenerate polygons are removed with the requested area threshold and before/after counts",
+            "degenerate and optional duplicate polygons are removed with before/after counts and reason metadata",
         )
     if payload["merge"]:
         add("merge", "exact", "selected hierarchy is merged according to the requested merge mode")

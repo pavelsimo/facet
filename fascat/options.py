@@ -178,6 +178,7 @@ class MergeVerticesOptions:
 @dataclass(frozen=True)
 class DeleteDegeneratePolygonsOptions:
     area_epsilon: float = 1e-12
+    delete_duplicates: bool = True
 
     def __post_init__(self) -> None:
         if self.area_epsilon < 0.0:

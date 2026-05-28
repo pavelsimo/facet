@@ -422,6 +422,7 @@ def test_delete_degenerate_polygons_asset_operation_reports_counts() -> None:
     assert step.after["delete_degenerate_polygons_before"] == 3
     assert step.after["delete_degenerate_polygons_after"] == 0
     assert step.after["delete_degenerate_polygons_removed"] == 3
+    assert step.after["delete_degenerate_polygons_removed_duplicate_polygons"] == 0
     assert step.after["delete_degenerate_polygons_removed_duplicate_vertices"] == 1
     assert step.after["delete_degenerate_polygons_removed_collapsed_edges"] == 1
     assert step.after["delete_degenerate_polygons_removed_near_flat_area"] == 1
@@ -465,7 +466,7 @@ def test_asset_operation_reports_include_options_and_before_after_counts() -> No
             "delete_degenerate",
             "area_epsilon",
         },
-        "delete_degenerate_polygons": {"area_epsilon"},
+        "delete_degenerate_polygons": {"area_epsilon", "delete_duplicates"},
         "stage": {
             "materials",
             "material_mode",
@@ -717,7 +718,7 @@ def test_pipeline_applies_delete_degenerate_polygons_step() -> None:
     spec = PipelineSpec.from_dict({"steps": [{"op": "delete_degenerate_polygons", "area_epsilon": 1e-12}]})
     mesh = Mesh(
         points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [2, 0, 0]], dtype=float),
-        faces=np.array([[0, 1, 2], [0, 1, 3]], dtype=int),
+        faces=np.array([[0, 1, 2], [0, 1, 3], [2, 1, 0]], dtype=int),
     )
     asset = Asset(
         root=Node(id="root", name="root", children=[Node(id="node", name="node", part_id="part")]),
@@ -729,7 +730,30 @@ def test_pipeline_applies_delete_degenerate_polygons_step() -> None:
     assert cleaned.parts["part"].mesh is not None
     assert cleaned.parts["part"].mesh.triangle_count == 1
     assert cleaned.report.steps[-1].name == "delete_degenerate_polygons"
+    assert cleaned.report.steps[-1].after["delete_degenerate_polygons_removed"] == 2
+    assert cleaned.report.steps[-1].after["delete_degenerate_polygons_removed_duplicate_polygons"] == 1
+
+
+def test_pipeline_can_preserve_duplicate_polygons_during_degenerate_cleanup() -> None:
+    spec = PipelineSpec.from_dict(
+        {"steps": [{"op": "delete_degenerate_polygons", "area_epsilon": 1e-12, "delete_duplicates": False}]}
+    )
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [2, 0, 0]], dtype=float),
+        faces=np.array([[0, 1, 2], [0, 1, 3], [2, 1, 0]], dtype=int),
+    )
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="node", part_id="part")]),
+        parts={"part": Part(id="part", name="Part", mesh=mesh)},
+    )
+
+    cleaned = spec.apply(asset)
+
+    assert cleaned.parts["part"].mesh is not None
+    assert cleaned.parts["part"].mesh.triangle_count == 2
+    assert cleaned.report.steps[-1].options["delete_duplicates"] is False
     assert cleaned.report.steps[-1].after["delete_degenerate_polygons_removed"] == 1
+    assert cleaned.report.steps[-1].after["delete_degenerate_polygons_removed_duplicate_polygons"] == 0
 
 
 def test_pipeline_validates_step_options_during_parse() -> None:

@@ -368,6 +368,8 @@ def test_delete_degenerate_polygons_reports_noop_and_removed_counts() -> None:
     assert cleaned.metadata["delete_degenerate_polygons_after"] == "0"
     assert cleaned.metadata["delete_degenerate_polygons_removed"] == "3"
     assert cleaned.metadata["delete_degenerate_polygons_vertices_removed"] == "2"
+    assert cleaned.metadata["delete_degenerate_polygons_delete_duplicates"] == "true"
+    assert cleaned.metadata["delete_degenerate_polygons_removed_duplicate_polygons"] == "0"
     assert cleaned.metadata["delete_degenerate_polygons_removed_duplicate_vertices"] == "1"
     assert cleaned.metadata["delete_degenerate_polygons_removed_collapsed_edges"] == "1"
     assert cleaned.metadata["delete_degenerate_polygons_removed_near_flat_area"] == "1"
@@ -377,9 +379,46 @@ def test_delete_degenerate_polygons_reports_noop_and_removed_counts() -> None:
     assert noop.triangle_count == 1
     assert noop.metadata["delete_degenerate_polygons_before"] == "0"
     assert noop.metadata["delete_degenerate_polygons_removed"] == "0"
+    assert noop.metadata["delete_degenerate_polygons_removed_duplicate_polygons"] == "0"
     assert noop.metadata["delete_degenerate_polygons_removed_duplicate_vertices"] == "0"
     assert noop.metadata["delete_degenerate_polygons_removed_collapsed_edges"] == "0"
     assert noop.metadata["delete_degenerate_polygons_removed_near_flat_area"] == "0"
+
+
+def test_delete_degenerate_polygons_removes_duplicate_polygons_by_default() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]], dtype=float),
+        faces=np.array([[0, 1, 2], [2, 1, 0], [0, 1, 3]], dtype=int),
+        material_indices=np.array([4, 9, 7], dtype=int),
+        face_groups={"duplicate": np.array([0, 1], dtype=int), "kept": np.array([2], dtype=int)},
+    )
+
+    cleaned = mesh.delete_degenerate_polygons(DeleteDegeneratePolygonsOptions())
+
+    assert cleaned.triangle_count == 2
+    assert cleaned.metadata["delete_degenerate_polygons_duplicate_polygons_before"] == "1"
+    assert cleaned.metadata["delete_degenerate_polygons_duplicate_polygons_after"] == "0"
+    assert cleaned.metadata["delete_degenerate_polygons_removed_duplicate_polygons"] == "1"
+    assert cleaned.metadata["delete_degenerate_polygons_removed"] == "1"
+    assert cleaned.material_indices is not None
+    assert cleaned.material_indices.tolist() == [4, 7]
+    assert cleaned.face_groups["duplicate"].tolist() == [0]
+    assert cleaned.face_groups["kept"].tolist() == [1]
+
+
+def test_delete_degenerate_polygons_can_preserve_duplicate_polygons() -> None:
+    mesh = Mesh(
+        points=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=float),
+        faces=np.array([[0, 1, 2], [2, 1, 0]], dtype=int),
+    )
+
+    cleaned = mesh.delete_degenerate_polygons(DeleteDegeneratePolygonsOptions(delete_duplicates=False))
+
+    assert cleaned.triangle_count == 2
+    assert cleaned.metadata["delete_degenerate_polygons_delete_duplicates"] == "false"
+    assert cleaned.metadata["delete_degenerate_polygons_duplicate_polygons_before"] == "1"
+    assert cleaned.metadata["delete_degenerate_polygons_duplicate_polygons_after"] == "1"
+    assert cleaned.metadata["delete_degenerate_polygons_removed_duplicate_polygons"] == "0"
 
 
 def test_quality_metrics_counts_duplicate_polygons() -> None:

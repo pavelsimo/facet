@@ -103,7 +103,7 @@ Core pipeline calls:
 | `asset.tessellate(options, where=None)` | `options` is `Tessellation`. `where` optionally scopes the operation with a `Filter`. | Convert source BREP geometry into meshes. |
 | `asset.repair(options, where=None)` | `options` is `RepairOptions`. `where` optionally scopes selected parts. | Clean mesh-level issues after tessellation. |
 | `asset.merge_vertices(options, where=None)` | `options` is `MergeVerticesOptions`. `where` optionally scopes selected parts. | Merge exact or tolerance-close vertices with attribute and material-boundary protection. |
-| `asset.delete_degenerate_polygons(options, where=None)` | `options` is `DeleteDegeneratePolygonsOptions`. `where` optionally scopes selected parts. | Remove repeated-vertex or near-zero-area triangles as a standalone cleanup step. |
+| `asset.delete_degenerate_polygons(options, where=None)` | `options` is `DeleteDegeneratePolygonsOptions`. `where` optionally scopes selected parts. | Remove repeated-vertex, duplicate, or near-zero-area triangles as a standalone cleanup step. |
 | `asset.stage(options, where=None)` | `options` is `StageOptions`. `where` optionally scopes selected parts. | Prepare materials, normals, tangents, and UV metadata for runtime export. |
 | `asset.optimize(options, where=None)` | `options` is `OptimizeOptions`. `where` optionally scopes selected parts. | Reduce mesh complexity while preserving selected mechanical features. |
 | `asset.lods(options, where=None)` | `options` is `LODOptions`. `where` optionally scopes selected parts. | Generate lower-detail runtime meshes. |
@@ -443,11 +443,20 @@ Use `MergeVerticesOptions` when you want Unity-style vertex merge as a standalon
 
 Use `DeleteDegeneratePolygonsOptions` when you want Unity-style degenerate
 polygon cleanup as a standalone, reproducible step. `area_epsilon` controls the
-near-zero-area threshold. The operation always writes a report step, even when
-no polygons are removed, and per-part metadata records before/after degenerate
+near-zero-area threshold, and `delete_duplicates=True` also removes exact
+duplicate polygons that reference the same three vertices regardless of winding.
+The operation always writes a report step, even when no polygons are removed,
+and per-part metadata records before/after degenerate and duplicate-polygon
 counts, removed triangle counts, removed unreferenced vertices, primary removal
-reasons for duplicate vertices, collapsed edges, and near-flat area, and the
-unit-aware area threshold.
+reasons for duplicate vertices, collapsed edges, near-flat area, and duplicate
+polygons, plus the unit-aware area threshold.
+
+`DeleteDegeneratePolygonsOptions` parameters:
+
+| Parameter | Meaning |
+|-----------|---------|
+| `area_epsilon` | Area threshold used to classify near-flat triangles as degenerate. |
+| `delete_duplicates` | Remove exact duplicate polygons after degenerate triangles are removed. |
 
 ## Feature-Preserving Simplification
 

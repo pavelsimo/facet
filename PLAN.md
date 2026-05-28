@@ -168,9 +168,9 @@ that are currently conservative approximations.
   matching now uses actual Euclidean distance instead of rounded position keys,
   so close vertices across spatial bucket boundaries are merged when protected
   attributes allow it.
-- Standalone degenerate-polygon cleanup now reports duplicate-vertex,
-  collapsed-edge, and near-flat removal reasons in mesh metadata and asset
-  report totals.
+- Standalone degenerate-polygon cleanup now removes exact duplicate polygons by
+  default and reports duplicate-polygon, duplicate-vertex, collapsed-edge, and
+  near-flat removal reasons in mesh metadata and asset report totals.
 
 ## Unity Asset Transformer Parity
 
@@ -213,7 +213,7 @@ Function-level parity notes from the linked Unity pages:
 | Tessellate models | Sag, sag-ratio, angle, max-polygon-length, per-part overrides, size-adaptive helpers, and attribute-provenance metadata are represented. | Add real tessellation-time tangent/UV/free-edge geometry generation controls, CAD-derived UV modes, optional free-edge geometry output, and material/metadata/curvature-driven tessellation profiles. |
 | Repair meshes | Duplicate and degenerate cleanup plus standalone degenerate-polygon deletion, T-junction, boundary-gap, non-manifold, and orientation diagnostics are reported. | Implement true T-junction sewing, boundary stitching, non-manifold edge cracking, tolerance-based overlap/z-fighting cleanup, non-orientable strip cracking, and explicit face/normal orientation strategies. |
 | Merge vertices | Standalone `merge_vertices` is exposed across Python, CLI, and TOML with normals, tangents, UV, and material-boundary protection plus before/after reports, Euclidean cross-bucket tolerance matching, same-position candidate counts, exact-duplicate, boundary, non-manifold, hard-edge, T-junction, boundary-gap, and near-duplicate candidate classifications, skipped merge reasons by protected attribute, high-risk tolerance warnings, and too-small tolerance advisories. | Add topology-only connectivity merging that can preserve hard-edge, UV, and material seams as split render attributes. |
-| Delete degenerate polygons | Standalone `delete_degenerate_polygons` is exposed across Python, CLI, and TOML with area-threshold controls, selection support, no-op reports, unit-aware area reporting, before/after counts, and duplicate-vertex, collapsed-edge, and near-flat removal reasons. | Extend cleanup beyond zero-area triangles to boundary-overlap, tolerance-based overlapping, and z-fighting cleanup and reason categories. |
+| Delete degenerate polygons | Standalone `delete_degenerate_polygons` is exposed across Python, CLI, and TOML with area-threshold controls, optional exact duplicate-polygon cleanup, selection support, no-op reports, unit-aware area reporting, before/after counts, and duplicate-polygon, duplicate-vertex, collapsed-edge, and near-flat removal reasons. | Extend cleanup beyond zero-area and exact-duplicate triangles to boundary-overlap, tolerance-based overlapping, and z-fighting cleanup and reason categories. |
 | Decimate to target | Target count, ratio, UV-importance modes, topology protection counts, RAM estimates, configurable iterative threshold/pass reports, measured-error reports, selection-wide target allocation summaries, and pre-cleanup for unused UVs/tangents exist. | Add enforced geometric error bounds, AO/user-weighted decimation, and cleanup for future vertex colors/weights. |
 | Unwrap UV | UV0/UV1 unwrap intent, solver method, iteration, tolerance, sharp-edge seam and forbid-overlap policy intent, distortion, and packing diagnostics are represented. | Add destination-channel control, channel-as-destination behavior when lines of interest define islands, backend-enforced seam policies, create-seams-from-lines-of-interest, seam graph metadata, island merge/alignment, and real repack/padding/share-map controls. |
 
@@ -267,10 +267,11 @@ Second-pass gaps from the Unity references:
     merge tolerance is large relative to local edge length or bounding-box
     scale. They also advise when the requested tolerance is too small for
     remaining near-duplicate vertex pairs.
-  - Degenerate-polygon cleanup reports now classify duplicate-vertex,
-    collapsed-edge, and near-flat removed triangles. Remaining work is boundary
-    overlap, exact duplicate polygon, tolerance-overlap, and likely z-fighting
-    reason categories backed by real cleanup logic.
+  - Degenerate-polygon cleanup now removes exact duplicate polygons by default
+    and classifies duplicate-polygon, duplicate-vertex, collapsed-edge, and
+    near-flat removed triangles. Remaining work is boundary overlap,
+    tolerance-overlap, and likely z-fighting reason categories backed by real
+    cleanup logic.
   - Model retopology as more than generic simplification: track proxy-mesh,
     dual-contouring, and field-aligned retopology backends plus normal-map
     transfer from LOD0/high-poly sources.
@@ -387,7 +388,7 @@ Parity gaps to track:
 3. CAD and mesh repair depth
    - Add an open-shell repair workflow: detect single open-shell parts, merge or group them before BREP healing, and keep separate warnings for unstitched faces.
    - Improve BREP healing beyond the current sewing/fix-edge path: sliver-face removal, duplicate face handling, tolerance unification, and visible report warnings for unsupported backend work.
-   - Mesh repair now deletes duplicate polygons and records before/after duplicate, degenerate, boundary-edge, and non-manifold metrics. Standalone degenerate-polygon cleanup now exposes the degenerate deletion path as a reproducible operation with before/after no-op reports and duplicate-vertex, collapsed-edge, and near-flat removal reasons.
+   - Mesh repair now deletes duplicate polygons and records before/after duplicate, degenerate, boundary-edge, and non-manifold metrics. Standalone degenerate-polygon cleanup now exposes the deletion path as a reproducible operation with before/after no-op reports and duplicate-polygon, duplicate-vertex, collapsed-edge, and near-flat removal reasons.
    - Add tolerance-based overlapping-surface and z-fighting cleanup, not only exact duplicate-polygon deletion.
    - Extend mesh repair with true T-junction sewing, non-manifold edge cracking, and configurable face-orientation strategies for closed solids versus open shells.
    - Mesh repair now detects non-orientable strips before face orientation so Mobius-like topology is reported separately from ordinary flipped faces.

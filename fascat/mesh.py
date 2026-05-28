@@ -672,10 +672,15 @@ class Mesh:
         before_degenerate_count = int(self.quality_metrics(area_epsilon=opts.area_epsilon)["degenerate_triangles"])
         reason_counts = self._degenerate_polygon_reason_counts(opts.area_epsilon)
         mesh = self.remove_degenerate_faces(opts.area_epsilon)
+        duplicate_polygons_before = int(mesh.quality_metrics(area_epsilon=opts.area_epsilon)["duplicate_polygons"])
+        if opts.delete_duplicates:
+            mesh = mesh.remove_duplicate_faces().remove_unreferenced_vertices()
+        duplicate_polygons_after = int(mesh.quality_metrics(area_epsilon=opts.area_epsilon)["duplicate_polygons"])
         after_degenerate_count = int(mesh.quality_metrics(area_epsilon=opts.area_epsilon)["degenerate_triangles"])
         mesh.metadata = {
             **mesh.metadata,
             "delete_degenerate_polygons_area_epsilon": f"{opts.area_epsilon:g}",
+            "delete_degenerate_polygons_delete_duplicates": str(opts.delete_duplicates).lower(),
             "delete_degenerate_polygons_vertices_before": str(before_vertex_count),
             "delete_degenerate_polygons_vertices_after": str(mesh.vertex_count),
             "delete_degenerate_polygons_vertices_removed": str(before_vertex_count - mesh.vertex_count),
@@ -684,6 +689,11 @@ class Mesh:
             "delete_degenerate_polygons_removed": str(before_triangle_count - mesh.triangle_count),
             "delete_degenerate_polygons_before": str(before_degenerate_count),
             "delete_degenerate_polygons_after": str(after_degenerate_count),
+            "delete_degenerate_polygons_duplicate_polygons_before": str(duplicate_polygons_before),
+            "delete_degenerate_polygons_duplicate_polygons_after": str(duplicate_polygons_after),
+            "delete_degenerate_polygons_removed_duplicate_polygons": str(
+                max(0, duplicate_polygons_before - duplicate_polygons_after)
+            ),
             **{key: str(value) for key, value in reason_counts.items()},
         }
         mesh.validate()

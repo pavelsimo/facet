@@ -1244,9 +1244,12 @@ def _delete_degenerate_polygons_report_stats(asset: Asset) -> dict[str, int]:
     delete_metadata_keys = (
         "delete_degenerate_polygons_before",
         "delete_degenerate_polygons_after",
+        "delete_degenerate_polygons_duplicate_polygons_before",
+        "delete_degenerate_polygons_duplicate_polygons_after",
         "delete_degenerate_polygons_removed",
         "delete_degenerate_polygons_vertices_removed",
         "delete_degenerate_polygons_removed_duplicate_vertices",
+        "delete_degenerate_polygons_removed_duplicate_polygons",
         "delete_degenerate_polygons_removed_collapsed_edges",
         "delete_degenerate_polygons_removed_near_flat_area",
     )
