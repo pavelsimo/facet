@@ -183,8 +183,22 @@ def test_decimate_uses_selection_budget() -> None:
     assert decimated.triangle_count <= 3
     assert decimated.report.steps[-1].name == "decimate"
     assert decimated.report.steps[-1].options["target_triangles"] == 3
+    target_strategy = decimated.report.steps[-1].options["target_strategy"]
+    assert target_strategy["kind"] == "target_count"
+    assert target_strategy["source"] == "explicit_target_triangles"
+    assert target_strategy["workflow"] == "unity_target_polygon_count"
+    assert target_strategy["backend_mode"] == "mesh_simplify"
+    assert target_strategy["source_triangles"] == 6
+    assert target_strategy["target_triangles"] == 3
+    assert target_strategy["target_ratio"] is None
+    assert target_strategy["effective_keep_ratio"] == 0.5
     assert decimated.metadata["decimate_source_triangles"] == "6"
     assert decimated.metadata["decimate_output_triangles"] == "3"
+    assert decimated.metadata["decimate_target_strategy"] == "target_count"
+    assert decimated.metadata["decimate_target_strategy_source"] == "explicit_target_triangles"
+    assert decimated.metadata["decimate_target_strategy_workflow"] == "unity_target_polygon_count"
+    assert decimated.metadata["decimate_target_triangles"] == "3"
+    assert decimated.metadata["decimate_effective_keep_ratio"] == "0.5"
     assert decimated.metadata["decimate_budget_allocation"] == "global_selection"
     assert decimated.metadata["decimate_allocation_targets"] == "body:3"
     assert decimated.metadata["decimate_allocated_target_triangles"] == "3"
@@ -200,6 +214,7 @@ def test_decimate_uses_selection_budget() -> None:
     assert decimated.metadata["decimate_simplification_passes"] == "1"
     assert decimated.metadata["decimate_iterative_passes"] == "0"
     assert decimated.metadata["decimate_max_part_simplification_passes"] == "1"
+    assert decimated.parts["body"].metadata["decimate_target_strategy"] == "target_count"
     assert decimated.report.steps[-1].after["decimate_source_triangles"] == 6
     assert decimated.report.steps[-1].after["decimate_output_triangles"] == 3
     assert decimated.report.steps[-1].after["decimate_estimated_memory_bytes"] == 30_000
@@ -210,6 +225,28 @@ def test_decimate_uses_selection_budget() -> None:
     assert decimated.report.steps[-1].after["decimate_allocated_target_triangles"] == 3
     assert decimated.report.steps[-1].after["decimate_allocation_reduced_parts"] == 1
     assert decimated.parts["body"].metadata["decimate_error_metric"] == "symmetric_vertex_nearest_distance"
+
+
+def test_decimate_reports_ratio_target_strategy() -> None:
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="body", name="Body", part_id="body")]),
+        parts={"body": Part(id="body", name="Body", mesh=_triangle_strip(8))},
+    )
+
+    decimated = asset.decimate(DecimateOptions(target_ratio=0.25))
+    target_strategy = decimated.report.steps[-1].options["target_strategy"]
+
+    assert target_strategy["kind"] == "target_ratio"
+    assert target_strategy["source"] == "explicit_target_ratio"
+    assert target_strategy["workflow"] == "unity_target_ratio"
+    assert target_strategy["source_triangles"] == 8
+    assert target_strategy["target_ratio"] == 0.25
+    assert target_strategy["effective_keep_ratio"] == 0.25
+    assert decimated.metadata["decimate_target_strategy"] == "target_ratio"
+    assert decimated.metadata["decimate_target_strategy_source"] == "explicit_target_ratio"
+    assert decimated.metadata["decimate_target_strategy_workflow"] == "unity_target_ratio"
+    assert decimated.metadata["decimate_target_ratio"] == "0.25"
+    assert decimated.metadata["decimate_effective_keep_ratio"] == "0.25"
 
 
 def test_decimate_reports_selection_target_allocation_by_part() -> None:
@@ -313,11 +350,28 @@ def test_quality_decimate_records_measured_error_metrics() -> None:
     )
 
     part = decimated.parts["body"]
+    target_strategy = decimated.report.steps[-1].options["target_strategy"]
+    assert target_strategy["kind"] == "quality_error"
+    assert target_strategy["source"] == "quality_tolerance_heuristic"
+    assert target_strategy["workflow"] == "fascat_quality_error_approximation"
+    assert target_strategy["surface_tolerance"] == 0.25
+    assert target_strategy["line_tolerance"] == 0.1
+    assert target_strategy["uv_tolerance"] == 0.05
+    assert target_strategy["quality_mapping"] == "tolerance_to_ratio_heuristic"
+    assert target_strategy["quality_bound_status"] == "measured_not_enforced"
+    assert target_strategy["quality_bound_enforced"] is False
     assert part.metadata["decimate_criterion"] == "quality"
+    assert part.metadata["decimate_target_strategy"] == "quality_error"
+    assert part.metadata["decimate_target_strategy_source"] == "quality_tolerance_heuristic"
+    assert part.metadata["decimate_effective_keep_ratio"] == "0.75"
+    assert part.metadata["decimate_quality_mapping"] == "tolerance_to_ratio_heuristic"
     assert part.metadata["decimate_source_triangles"] == "8"
     assert int(part.metadata["decimate_output_triangles"]) < 8
     assert float(part.metadata["decimate_triangle_reduction"]) > 0.0
     assert decimated.metadata["decimate_budget_allocation"] == "per_part"
+    assert decimated.metadata["decimate_target_strategy"] == "quality_error"
+    assert decimated.metadata["decimate_effective_keep_ratio"] == "0.75"
+    assert decimated.metadata["decimate_quality_bound_status"] == "measured_not_enforced"
     assert "measured vertex error" in decimated.report.steps[-1].warnings[0]
 
 

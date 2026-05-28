@@ -95,6 +95,9 @@ that are currently conservative approximations.
 - Decimation now records RAM estimates, budget-allocation mode,
   configurable iterative-threshold runtime controls, and actual simplification
   pass counts in metadata and report fields.
+- Explicit decimation now reports target strategy as target count, target ratio,
+  or quality/error approximation, including source/workflow metadata, effective
+  keep ratio, backend mode, and quality-bound enforcement status.
 - Staging now warns when bake-domain UVs are only unwrapped without a separate
   repack/padding pass and records that missing repack status in metadata.
 - Staging now records UV island counts, pack efficiency, normalized-space
@@ -311,10 +314,11 @@ Second-pass gaps from the Unity references:
     repair, tessellation, staging, optimization, LOD, and export decisions in
     one reproducible preset instead of only reporting the resolved settings
     after a custom pipeline has run.
-  - Report decimation target strategy explicitly as target-count, ratio,
-    quality/error, or backend-specific edge-collapse mode so Unity's
-    "target polygon count or ratio" workflow stays distinct from future
-    quality-driven simplification.
+  - Decimation target strategy is now explicit as target-count, target-ratio, or
+    quality/error approximation so Unity's "target polygon count or ratio"
+    workflow stays distinct from current quality-driven simplification. Remaining
+    parity is wiring future backend-specific edge-collapse or error-bounded modes
+    into the same report field.
   - Model AABB UV projection as its own staging operation with local/global
     bounds, `uv3dSize`, destination channel, override policy, and unit metadata,
     because Unity uses simple projection separately from unwrap/repack flows.
@@ -495,10 +499,11 @@ Parity gaps to track:
    - Unity-style global target allocation across a selected assembly now records per-part assigned targets, reduced-versus-preserved part counts, and min/max target summaries while decimating at part level.
    - Decimation now records RAM estimates using the Unity 5 GB per million polygons rule of thumb, reports global versus per-part budget allocation, exposes a configurable iterative threshold, and records actual simplification and iterative pass counts.
    - Target-device/profile triangle budgets now seed explicit decimation targets when `--decimate` has no manual target or ratio. Remaining work: named XR/HoloLens-style decimation presets and more device-specific simplification policy.
-   - Add explicit target-strategy reporting for target polygon count, ratio,
-     quality/error criterion, and future backend-specific decimation modes so
-     reports show whether the operation followed Unity's target-count workflow
-     or a Fascat quality approximation.
+   - Explicit decimation now reports target strategy for target polygon count,
+     ratio, and quality/error approximation, so reports show whether the
+     operation followed Unity's target-count workflow or a Fascat quality
+     approximation. Remaining work: add future backend-specific decimation modes
+     to the same strategy field.
    - Replace quality-criterion heuristics with measured geometric error.
    - Explicit decimation now supports UV importance modes: preserve full UV islands, preserve seam topology only, or ignore UVs by stripping UV/tangent attributes before simplification.
    - Pre-decimation cleanup now removes unused UV channels and tangents, records removed/preserved attribute metadata, and reports when preserved UVs can make simplification less efficient. Remaining work is vertex-color/weight cleanup and measured efficiency deltas.

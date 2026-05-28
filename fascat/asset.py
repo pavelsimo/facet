@@ -630,18 +630,19 @@ class Asset:
         return asset
 
     def decimate(self, options: DecimateOptions | None = None, *, where: Any | None = None) -> Asset:
-        from fascat.ops.actions import decimate_asset
+        from fascat.ops.actions import decimate_asset, decimation_target_strategy
 
         opts = options or DecimateOptions()
         scope = self._operation_scope(where)
         before = _hierarchy_report_stats(self)
         warning_count = len(self.report.warnings)
+        target_strategy = decimation_target_strategy(scope.asset, opts, selected_part_ids=scope.selected_part_ids)
         with timed_step() as timer:
             asset = decimate_asset(scope.asset, opts, selected_part_ids=scope.selected_part_ids)
         step_warnings = asset.report.warnings[warning_count:]
         asset.report.add_step(
             "decimate",
-            options=_options_with_scope(opts.to_dict(), scope),
+            options=_options_with_scope({**opts.to_dict(), "target_strategy": target_strategy}, scope),
             before=before,
             after=_decimation_report_stats(asset),
             duration=timer.duration,

@@ -169,6 +169,15 @@ def decimate_asset(
     return result
 
 
+def decimation_target_strategy(
+    asset: Asset,
+    options: DecimateOptions,
+    *,
+    selected_part_ids: set[str] | None = None,
+) -> dict[str, object]:
+    return _decimation_target_strategy(_source_meshes(asset, selected_part_ids), options)
+
+
 def remove_holes_asset(
     asset: Asset,
     options: RemoveHolesOptions,
@@ -480,6 +489,72 @@ def _decimate_ratio(options: DecimateOptions) -> float | None:
     return 0.5
 
 
+def _decimation_target_strategy(source_meshes: dict[str, Mesh], options: DecimateOptions) -> dict[str, object]:
+    kind, source, workflow = _decimation_target_strategy_kind(options)
+    source_triangles = sum(mesh.triangle_count for mesh in source_meshes.values() if mesh.triangle_count > 0)
+    effective_ratio = _requested_decimation_keep_ratio(source_meshes, options)
+    strategy: dict[str, object] = {
+        "kind": kind,
+        "source": source,
+        "workflow": workflow,
+        "backend_mode": "mesh_simplify",
+        "criterion": options.criterion,
+        "budget_scope": options.budget_scope,
+        "source_triangles": source_triangles,
+        "target_triangles": options.target_triangles,
+        "target_ratio": options.target_ratio,
+        "effective_keep_ratio": effective_ratio,
+        "quality_bound_enforced": False,
+        "quality_bound_status": "measured_not_enforced" if kind == "quality_error" else "not_applicable",
+    }
+    if kind == "quality_error":
+        strategy.update(
+            {
+                "surface_tolerance": options.surface_tolerance,
+                "line_tolerance": options.line_tolerance,
+                "uv_tolerance": options.uv_tolerance,
+                "quality_mapping": "tolerance_to_ratio_heuristic",
+            }
+        )
+    return strategy
+
+
+def _decimation_target_strategy_kind(options: DecimateOptions) -> tuple[str, str, str]:
+    if options.target_triangles is not None:
+        return "target_count", "explicit_target_triangles", "unity_target_polygon_count"
+    if options.target_ratio is not None:
+        return "target_ratio", "explicit_target_ratio", "unity_target_ratio"
+    if options.criterion == "quality":
+        return "quality_error", "quality_tolerance_heuristic", "fascat_quality_error_approximation"
+    return "target_ratio", "default_target_ratio", "unity_target_ratio"
+
+
+def _decimation_target_strategy_metadata(strategy: dict[str, object]) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "decimate_target_strategy": str(strategy["kind"]),
+        "decimate_target_strategy_source": str(strategy["source"]),
+        "decimate_target_strategy_workflow": str(strategy["workflow"]),
+        "decimate_target_strategy_backend": str(strategy["backend_mode"]),
+        "decimate_quality_bound_status": str(strategy["quality_bound_status"]),
+        "decimate_quality_bound_enforced": str(strategy["quality_bound_enforced"]).lower(),
+    }
+    for key in ("target_triangles", "target_ratio", "effective_keep_ratio"):
+        value = strategy.get(key)
+        if value is not None:
+            metadata[f"decimate_{key}"] = _format_metadata_value(value)
+    if strategy.get("quality_mapping") is not None:
+        metadata["decimate_quality_mapping"] = str(strategy["quality_mapping"])
+    return metadata
+
+
+def _format_metadata_value(value: object) -> str:
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, int | float):
+        return f"{value:.9g}"
+    return str(value)
+
+
 def _preserve_uv_seams(options: DecimateOptions) -> bool:
     return options.uv_importance in {"preserve_islands", "preserve_seams"}
 
@@ -756,6 +831,8 @@ def _annotate_decimation_result(
     pass_counts: dict[str, _DecimationPassCount],
     part_targets: dict[str, int],
 ) -> None:
+    target_strategy = _decimation_target_strategy(source_meshes, options)
+    target_strategy_metadata = _decimation_target_strategy_metadata(target_strategy)
     source_total = 0
     output_total = 0
     max_error = 0.0
@@ -802,6 +879,7 @@ def _annotate_decimation_result(
         max_part_passes = max(max_part_passes, counts.simplification_passes)
         metadata = {
             **part.metadata,
+            **target_strategy_metadata,
             "decimate_criterion": options.criterion,
             "decimate_budget_scope": options.budget_scope,
             "decimate_uv_importance": options.uv_importance,
@@ -867,6 +945,7 @@ def _annotate_decimation_result(
     requested_ratio = _requested_decimation_keep_ratio(source_meshes, options)
     if requested_ratio is not None:
         asset.metadata["decimate_requested_keep_ratio"] = f"{requested_ratio:.9g}"
+    asset.metadata.update(target_strategy_metadata)
     asset.metadata["decimate_source_triangles"] = str(source_total)
     asset.metadata["decimate_output_triangles"] = str(output_total)
     asset.metadata["decimate_triangle_reduction"] = f"{reduction:.9g}"
