@@ -220,6 +220,8 @@ def test_repair_report_includes_unit_aware_tolerance_policy() -> None:
     assert policy["operations"] == {
         "vertex_merge": "enabled",
         "degenerate_polygon_cleanup": "enabled",
+        "face_orientation": "closed_exterior",
+        "normal_orientation": "from_faces",
         "t_junction_sewing": "not_implemented",
         "boundary_gap_stitching": "not_implemented",
         "non_manifold_edge_cracking": "not_implemented",
@@ -300,6 +302,60 @@ def test_repair_report_includes_flipped_component_metrics() -> None:
     assert step.after["repair_flipped_components_before_orientation"] == 1
     assert step.after["repair_flipped_components_after_orientation"] == 1
     assert any("flipped closed orientation component" in warning for warning in step.warnings)
+
+
+def test_repair_reports_orientation_policy_intent() -> None:
+    asset = Asset(
+        root=Node(id="root", name="root", children=[Node(id="node", name="node", part_id="solid")]),
+        parts={"solid": Part(id="solid", name="Solid", mesh=_flipped_tetrahedron_mesh())},
+    )
+
+    repaired = asset.repair(
+        RepairOptions(
+            face_orientation="viewer_standpoint",
+            normal_orientation="viewer_standpoint",
+            viewer_position=(0.0, 0.0, 10.0),
+        )
+    )
+
+    mesh = repaired.parts["solid"].mesh
+    step = repaired.report.steps[-1]
+    assert mesh is not None
+    assert mesh.metadata["repair_face_orientation_status"] == "intent_not_implemented"
+    assert mesh.metadata["repair_normal_orientation_status"] == "intent_not_implemented"
+    assert step.options["face_orientation"] == "viewer_standpoint"
+    assert step.options["normal_orientation"] == "viewer_standpoint"
+    assert step.options["viewer_position"] == [0.0, 0.0, 10.0]
+    assert step.options["tolerance_policy"]["operations"]["face_orientation"] == "intent_not_implemented"
+    assert step.options["tolerance_policy"]["operations"]["normal_orientation"] == "intent_not_implemented"
+    assert any("viewer_standpoint face orientation" in warning for warning in step.warnings)
+    assert any("viewer_standpoint normal orientation" in warning for warning in step.warnings)
+
+
+def test_pipeline_repair_orientation_policy_is_parsed() -> None:
+    spec = PipelineSpec.from_dict(
+        {
+            "steps": [
+                {
+                    "op": "repair",
+                    "face_orientation": "viewer_standpoint",
+                    "normal_orientation": "viewer_standpoint",
+                    "viewer_position": [0.0, 0.0, 10.0],
+                }
+            ]
+        }
+    )
+
+    repaired = spec.apply(_triangle_asset())
+    step = repaired.report.steps[-1]
+    mesh = repaired.parts["part"].mesh
+
+    assert mesh is not None
+    assert step.name == "repair"
+    assert step.options["face_orientation"] == "viewer_standpoint"
+    assert step.options["normal_orientation"] == "viewer_standpoint"
+    assert step.options["viewer_position"] == [0.0, 0.0, 10.0]
+    assert mesh.metadata["repair_orientation_viewer_position"] == "0,0,10"
 
 
 def test_merge_vertices_asset_operation_reports_counts() -> None:

@@ -8,6 +8,15 @@ UV1Mode = Literal["none", "box", "unwrap", "lightmap", "copy_uv0"]
 UVMode = UV0Mode
 UnwrapMethod = Literal["default", "conformal", "isometric"]
 AabbProjectionScope = Literal["local", "shared"]
+FaceOrientationStrategy = Literal[
+    "exterior",
+    "single_sided_open_shell",
+    "unstitched_groups",
+    "preserve",
+    "source_trusted",
+    "viewer_standpoint",
+]
+NormalOrientationStrategy = Literal["from_faces", "preserve", "source_trusted", "viewer_standpoint"]
 NormalMode = Literal["none", "smooth", "hard_edges", "flat"]
 NormalWeighting = Literal["angle", "area"]
 MaterialMode = Literal["cad", "display", "none"]
@@ -94,6 +103,12 @@ def _normalize_string_tuple(value: object, field_name: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(items))
 
 
+def _normalize_float3(value: object, field_name: str) -> tuple[float, float, float]:
+    if isinstance(value, str) or not isinstance(value, (list, tuple)) or len(value) != 3:
+        raise ValueError(f"{field_name} must be a sequence of three numeric values")
+    return (float(value[0]), float(value[1]), float(value[2]))
+
+
 @dataclass(frozen=True)
 class Tessellation:
     sag: float = 0.1
@@ -144,6 +159,9 @@ class RepairOptions:
     merge_vertices: bool = True
     delete_degenerate: bool = True
     fix_winding: bool = True
+    face_orientation: FaceOrientationStrategy = "exterior"
+    normal_orientation: NormalOrientationStrategy = "from_faces"
+    viewer_position: tuple[float, float, float] | None = None
     fill_small_holes: bool = False
     area_epsilon: float = 1e-12
 
@@ -152,9 +170,34 @@ class RepairOptions:
             raise ValueError("repair tolerance must be greater than or equal to 0")
         if self.area_epsilon < 0.0:
             raise ValueError("area_epsilon must be greater than or equal to 0")
+        if self.face_orientation not in {
+            "exterior",
+            "single_sided_open_shell",
+            "unstitched_groups",
+            "preserve",
+            "source_trusted",
+            "viewer_standpoint",
+        }:
+            raise ValueError(
+                "face_orientation must be one of: exterior, single_sided_open_shell, "
+                "unstitched_groups, preserve, source_trusted, viewer_standpoint"
+            )
+        if self.normal_orientation not in {"from_faces", "preserve", "source_trusted", "viewer_standpoint"}:
+            raise ValueError(
+                "normal_orientation must be one of: from_faces, preserve, source_trusted, viewer_standpoint"
+            )
+        if self.viewer_position is not None:
+            object.__setattr__(self, "viewer_position", _normalize_float3(self.viewer_position, "viewer_position"))
+        if (
+            self.face_orientation == "viewer_standpoint" or self.normal_orientation == "viewer_standpoint"
+        ) and self.viewer_position is None:
+            raise ValueError("viewer_position must be set when a viewer_standpoint orientation strategy is requested")
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        data = asdict(self)
+        if self.viewer_position is not None:
+            data["viewer_position"] = list(self.viewer_position)
+        return data
 
 
 @dataclass(frozen=True)

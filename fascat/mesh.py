@@ -22,6 +22,50 @@ class MeshValidationError(ValueError):
     """Raised when mesh arrays are not usable by the pipeline."""
 
 
+def _should_repair_winding(options: RepairOptions) -> bool:
+    return options.fix_winding and options.face_orientation == "exterior"
+
+
+def _repair_face_orientation_status(options: RepairOptions) -> str:
+    if not options.fix_winding:
+        return "disabled"
+    if options.face_orientation == "exterior":
+        return "closed_exterior"
+    if options.face_orientation == "source_trusted":
+        return "trusted_source"
+    if options.face_orientation == "preserve":
+        return "preserved"
+    return "intent_not_implemented"
+
+
+def _apply_repair_normal_orientation(
+    mesh: Mesh,
+    options: RepairOptions,
+    input_normals: FloatArray | None,
+    *,
+    face_orientation_status: str,
+) -> tuple[Mesh, str]:
+    if options.normal_orientation == "viewer_standpoint":
+        return mesh.compute_normals(), "intent_not_implemented"
+    if options.normal_orientation == "from_faces":
+        return mesh.compute_normals(), "generated_from_faces"
+    if (
+        input_normals is not None
+        and input_normals.shape == (mesh.vertex_count, 3)
+        and face_orientation_status in {"disabled", "preserved", "trusted_source"}
+    ):
+        result = mesh.copy()
+        result.normals = input_normals.copy()
+        return result, "preserved_existing"
+    if face_orientation_status == "closed_exterior":
+        return mesh.compute_normals(), "generated_after_face_orientation"
+    return mesh.compute_normals(), "generated_missing_source"
+
+
+def _format_float_value(value: float) -> str:
+    return f"{float(value):.9g}"
+
+
 def _vector_angles(left: FloatArray, right: FloatArray) -> FloatArray:
     left_lengths = np.linalg.norm(left, axis=1)
     right_lengths = np.linalg.norm(right, axis=1)
@@ -211,6 +255,7 @@ class Mesh:
 
     def repair(self, options: RepairOptions | None = None) -> Mesh:
         opts = options or RepairOptions()
+        input_normals = None if self.normals is None else self.normals.copy()
         mesh = self.copy()
         mesh = mesh._drop_invalid_faces()
         mesh = mesh._drop_non_finite()
@@ -226,19 +271,26 @@ class Mesh:
         if opts.delete_degenerate:
             mesh = mesh.remove_degenerate_faces(opts.area_epsilon)
         orientation_metrics = mesh.orientability_metrics()
-        if opts.fix_winding:
+        face_orientation_status = _repair_face_orientation_status(opts)
+        if _should_repair_winding(opts):
             mesh = mesh.fix_winding()
-        mesh = mesh.compute_normals()
+        mesh, normal_orientation_status = _apply_repair_normal_orientation(
+            mesh,
+            opts,
+            input_normals,
+            face_orientation_status=face_orientation_status,
+        )
         if opts.fill_small_holes:
             previous_triangle_count = mesh.triangle_count
             mesh = mesh.fill_holes()
             if mesh.triangle_count != previous_triangle_count:
                 mesh = mesh.compute_normals()
+                normal_orientation_status = "generated_after_hole_fill"
         after_orientation_metrics = mesh.orientability_metrics()
         after_metrics = mesh.quality_metrics(area_epsilon=opts.area_epsilon)
         after_t_junctions = mesh.t_junction_count(tolerance=t_junction_tolerance)
         after_boundary_gaps = mesh.boundary_gap_count(tolerance=boundary_gap_tolerance)
-        mesh.metadata = {
+        repair_metadata = {
             **mesh.metadata,
             "repair_duplicate_polygons_before": str(int(before_metrics["duplicate_polygons"])),
             "repair_duplicate_polygons_after": str(int(after_metrics["duplicate_polygons"])),
@@ -266,7 +318,16 @@ class Mesh:
             "repair_flipped_components_after_orientation": str(
                 int(after_orientation_metrics["flipped_orientation_components"])
             ),
+            "repair_face_orientation_strategy": opts.face_orientation,
+            "repair_face_orientation_status": face_orientation_status,
+            "repair_normal_orientation_strategy": opts.normal_orientation,
+            "repair_normal_orientation_status": normal_orientation_status,
         }
+        if opts.viewer_position is not None:
+            repair_metadata["repair_orientation_viewer_position"] = ",".join(
+                _format_float_value(value) for value in opts.viewer_position
+            )
+        mesh.metadata = repair_metadata
         mesh.validate()
         return mesh
 

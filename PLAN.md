@@ -115,6 +115,10 @@ that are currently conservative approximations.
   that remaining gaps still need a stitching backend.
 - Mesh repair now records before/after flipped closed-component counts and
   flips coherent inward shells during winding repair when possible.
+- Mesh repair now records explicit face-orientation and normal-orientation
+  policies, including source-trusted, preserve, viewer-standpoint,
+  single-sided open-shell, and unstitched-group intent, so Unity-style
+  orientation choices are visible in metadata and reports.
 - glTF write reports now include a runtime compatibility matrix for Unity
   glTFast, web, mobile, and XR targets with extension state, support, and
   fallback notes.
@@ -287,10 +291,12 @@ Fresh gaps from the linked Unity audit:
 Second-pass gaps from the Unity references:
 
 - 2026-05-28 re-read deltas:
-  - Add viewer-standpoint face/normal orientation strategies and a "source
-    orientation trusted" mode, because Unity treats face orientation as
-    subjective and recommends disabling it when source winding is already known
-    to be correct.
+  - Viewer-standpoint face/normal orientation strategies and a "source
+    orientation trusted" mode are now explicit repair policy choices, because
+    Unity treats face orientation as subjective and recommends disabling it when
+    source winding is already known to be correct. Remaining work is backend
+    implementation for viewer/open-shell orientation instead of report-only
+    policy intent.
   - Vertex-merge reports now classify exact-duplicate, boundary, non-manifold,
     hard-edge, T-junction, and boundary-gap candidates, and warn when requested
     merge tolerance is large relative to local edge length or bounding-box
@@ -354,10 +360,11 @@ Second-pass gaps from the Unity references:
   effective import, tessellation, staging, optimization, LOD, and export
   settings so Unity-style module-property choices are reproducible from a
   report.
-- Treat orientation as its own post-repair stage, not just a side effect of mesh
-  cleanup or normal generation. Unity separates polygon orientation, normal
-  orientation, and open-shell/unstitched-face handling; Fascat should report
-  those decisions separately.
+- Orientation policy is now reported separately from generic mesh cleanup:
+  Fascat records polygon orientation, normal orientation, source-trusted,
+  viewer-standpoint, open-shell, and unstitched-group choices. Remaining work
+  is a standalone operation or backend pass that can actually orient
+  viewer/open-shell/unstitched groups.
 - Model Unity's connectivity-oriented vertex merge more accurately. Unity can
   merge same-position vertices with different render attributes to recreate
   connectivity; Fascat currently avoids collapsing those seams by default. Add
@@ -438,10 +445,10 @@ Parity gaps to track:
    - Improve BREP healing beyond the current sewing/fix-edge path: sliver-face removal, duplicate face handling, tolerance unification, and visible report warnings for unsupported backend work.
    - Mesh repair now deletes duplicate polygons and records before/after duplicate, degenerate, boundary-edge, and non-manifold metrics. Standalone degenerate-polygon cleanup now exposes the deletion path as a reproducible operation with before/after no-op reports and duplicate-polygon, duplicate-vertex, collapsed-edge, and near-flat removal reasons.
    - Add tolerance-based overlapping-surface and z-fighting cleanup, not only exact duplicate-polygon deletion.
-   - Extend mesh repair with true T-junction sewing, non-manifold edge cracking, and configurable face-orientation strategies for closed solids versus open shells.
+   - Extend mesh repair with true T-junction sewing and non-manifold edge cracking. Face-orientation strategies for closed solids, source-trusted input, viewer standpoint, open shells, and unstitched groups are now explicit policy/report fields; remaining work is backend implementation beyond the current closed-exterior winding path.
    - Mesh repair now detects non-orientable strips before face orientation so Mobius-like topology is reported separately from ordinary flipped faces.
    - Add optional cracking of non-orientable/Mobius-like strips before face orientation when a backend can split them safely.
-   - Add explicit face-orientation and normal-orientation report steps with selectable strategies for exterior solids, single-sided open shells, unstitched-face groups, and preserved two-sided surfaces.
+   - Face-orientation and normal-orientation choices are now explicit report fields with selectable strategies for exterior solids, source-trusted input, viewer standpoint, single-sided open shells, unstitched-face groups, and preserved/two-sided surfaces. Remaining work is a standalone expert operation and backend enforcement for non-exterior strategies.
    - Missing-normal generation now supports sharp-edge angle, angle or area weighting, and preserve-versus-override behavior with report metadata.
    - Standalone vertex merging now rebuilds connectivity without collapsing intentional material, normal, tangent, or UV seams by default, uses Euclidean cross-bucket tolerance matching, reports skipped merge reasons by protected attribute, classifies candidate topology pressure including T-junctions, boundary gaps, and near-duplicate pairs, warns on high-risk tolerance scale, and advises when tolerances are too small to merge near duplicates. Remaining work: support topology-only connectivity merging with split render attributes.
    - Mesh repair now records before/after T-junction, nearby boundary-gap, and flipped closed-component counts. It warns that sewing/stitching remains unavailable and warns when outward orientation is still not produced.

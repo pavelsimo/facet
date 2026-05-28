@@ -503,6 +503,38 @@ def test_repair_records_flipped_closed_orientation_components() -> None:
     assert repaired.metadata["repair_flipped_components_before_orientation"] == "1"
     assert repaired.metadata["repair_flipped_components_after_orientation"] == "0"
     assert not_fixed.metadata["repair_flipped_components_after_orientation"] == "1"
+    assert repaired.metadata["repair_face_orientation_strategy"] == "exterior"
+    assert repaired.metadata["repair_face_orientation_status"] == "closed_exterior"
+    assert repaired.metadata["repair_normal_orientation_strategy"] == "from_faces"
+    assert repaired.metadata["repair_normal_orientation_status"] == "generated_from_faces"
+
+
+def test_repair_can_record_trusted_source_orientation_policy() -> None:
+    mesh = flipped_tetrahedron_mesh()
+
+    repaired = mesh.repair(RepairOptions(face_orientation="source_trusted"))
+
+    assert repaired.metadata["repair_flipped_components_before_orientation"] == "1"
+    assert repaired.metadata["repair_flipped_components_after_orientation"] == "1"
+    assert repaired.metadata["repair_face_orientation_strategy"] == "source_trusted"
+    assert repaired.metadata["repair_face_orientation_status"] == "trusted_source"
+
+
+def test_repair_records_viewer_standpoint_orientation_intent() -> None:
+    mesh = flipped_tetrahedron_mesh()
+
+    repaired = mesh.repair(
+        RepairOptions(
+            face_orientation="viewer_standpoint",
+            normal_orientation="viewer_standpoint",
+            viewer_position=(0.0, 0.0, 10.0),
+        )
+    )
+
+    assert repaired.metadata["repair_flipped_components_after_orientation"] == "1"
+    assert repaired.metadata["repair_face_orientation_status"] == "intent_not_implemented"
+    assert repaired.metadata["repair_normal_orientation_status"] == "intent_not_implemented"
+    assert repaired.metadata["repair_orientation_viewer_position"] == "0,0,10"
 
 
 def test_mesh_merges_close_vertices_with_tolerance() -> None:

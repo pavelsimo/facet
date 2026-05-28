@@ -133,6 +133,9 @@ _REPAIR_KEYS = frozenset(
         "merge_vertices",
         "delete_degenerate",
         "fix_winding",
+        "face_orientation",
+        "normal_orientation",
+        "viewer_position",
         "fill_small_holes",
         "area_epsilon",
     }
@@ -834,6 +837,9 @@ def _repair_options(values: dict[str, object]) -> RepairOptions:
         merge_vertices=bool(values.get("merge_vertices", True)),
         delete_degenerate=bool(values.get("delete_degenerate", True)),
         fix_winding=bool(values.get("fix_winding", True)),
+        face_orientation=cast(Any, _literal(values.get("face_orientation", "exterior"))),
+        normal_orientation=cast(Any, _literal(values.get("normal_orientation", "from_faces"))),
+        viewer_position=_float3(values.get("viewer_position")) if values.get("viewer_position") is not None else None,
         fill_small_holes=bool(values.get("fill_small_holes", False)),
         area_epsilon=_as_float(values.get("area_epsilon", 1e-12)),
     )
@@ -1086,6 +1092,16 @@ def _int_list(value: object) -> tuple[int, ...]:
     else:
         raise ValueError("pipeline value must be a string or list")
     return tuple(dict.fromkeys(_as_int(item) for item in values))
+
+
+def _float3(value: object) -> tuple[float, float, float]:
+    if isinstance(value, str):
+        values: object = [item.strip() for item in value.split(",") if item.strip()]
+    else:
+        values = value
+    if not isinstance(values, (list, tuple)) or len(values) != 3:
+        raise ValueError("pipeline value must be a three-item numeric list")
+    return (_as_float(values[0]), _as_float(values[1]), _as_float(values[2]))
 
 
 def _as_float(value: object) -> float:

@@ -28,12 +28,14 @@ from fascat.options import (
     DecimateOptions,
     DeleteDegeneratePolygonsOptions,
     ExplodeOptions,
+    FaceOrientationStrategy,
     GltfExportOptions,
     LODGeneratorOptions,
     LODOptions,
     MergeOptions,
     MergeVerticesOptions,
     MetadataExportOptions,
+    NormalOrientationStrategy,
     ObjExportOptions,
     OptimizeOptions,
     RemoveHolesOptions,
@@ -1685,10 +1687,26 @@ def tessellate(
     )
 
 
-def repair(asset: Asset, *, tolerance: float = 0.0, where: Filter | None = None) -> Asset:
+def repair(
+    asset: Asset,
+    *,
+    tolerance: float = 0.0,
+    face_orientation: FaceOrientationStrategy = "exterior",
+    normal_orientation: NormalOrientationStrategy = "from_faces",
+    viewer_position: tuple[float, float, float] | None = None,
+    where: Filter | None = None,
+) -> Asset:
     from fascat.options import RepairOptions
 
-    return asset.repair(RepairOptions(tolerance=tolerance), where=where)
+    return asset.repair(
+        RepairOptions(
+            tolerance=tolerance,
+            face_orientation=face_orientation,
+            normal_orientation=normal_orientation,
+            viewer_position=viewer_position,
+        ),
+        where=where,
+    )
 
 
 def merge_vertices(

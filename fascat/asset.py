@@ -306,6 +306,8 @@ class Asset:
             operations={
                 "vertex_merge": "enabled" if opts.merge_vertices else "disabled",
                 "degenerate_polygon_cleanup": "enabled" if opts.delete_degenerate else "disabled",
+                "face_orientation": _repair_face_orientation_operation(opts),
+                "normal_orientation": _repair_normal_orientation_operation(opts),
                 "t_junction_sewing": "not_implemented",
                 "boundary_gap_stitching": "not_implemented",
                 "non_manifold_edge_cracking": "not_implemented",
@@ -328,6 +330,22 @@ class Asset:
                         asset.report.add_warning(
                             f"part {part.id} has {non_orientable_edges} non-orientable shared edge(s) "
                             "before face orientation; Mobius-like topology cannot be fixed by winding normalization"
+                        )
+                    if part.mesh.metadata.get("repair_face_orientation_status") == "intent_not_implemented":
+                        asset.report.add_warning(
+                            f"part {part.id} requested {opts.face_orientation} face orientation, but the current "
+                            "mesh repair backend can only orient closed exterior components; source winding was preserved"
+                        )
+                    if part.mesh.metadata.get("repair_normal_orientation_status") == "intent_not_implemented":
+                        asset.report.add_warning(
+                            f"part {part.id} requested {opts.normal_orientation} normal orientation, but the current "
+                            "mesh repair backend generates normals from face orientation"
+                        )
+                    normal_orientation_status = part.mesh.metadata.get("repair_normal_orientation_status")
+                    if normal_orientation_status in {"generated_missing_source", "generated_after_face_orientation"}:
+                        asset.report.add_warning(
+                            f"part {part.id} requested {opts.normal_orientation} normal orientation, but compatible "
+                            "source normals were unavailable after mesh cleanup"
                         )
                     remaining_t_junctions = _metadata_int(part.mesh.metadata.get("repair_t_junctions_after"), 0)
                     if remaining_t_junctions:
@@ -1125,6 +1143,24 @@ def _lod_report_stats(asset: Asset) -> dict[str, int]:
         if key in asset.metadata:
             stats[key] = _metadata_int(asset.metadata[key], 0)
     return stats
+
+
+def _repair_face_orientation_operation(options: RepairOptions) -> str:
+    if not options.fix_winding:
+        return "disabled"
+    if options.face_orientation == "exterior":
+        return "closed_exterior"
+    if options.face_orientation in {"source_trusted", "preserve"}:
+        return "preserve_source"
+    return "intent_not_implemented"
+
+
+def _repair_normal_orientation_operation(options: RepairOptions) -> str:
+    if options.normal_orientation == "from_faces":
+        return "from_faces"
+    if options.normal_orientation in {"source_trusted", "preserve"}:
+        return "preserve_when_compatible"
+    return "intent_not_implemented"
 
 
 def _repair_report_stats(asset: Asset) -> dict[str, int]:
