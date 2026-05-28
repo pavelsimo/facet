@@ -222,7 +222,7 @@ def convert(
     )
     if output_format == "gltf":
         write_options["runtime_dependencies"] = runtime_dependency_report(asset, gltf_options)
-    _add_texture_export_policy_report(asset, selected, output_format)
+    _add_texture_export_policy_report(asset, selected, output_format, gltf_options=gltf_options)
     file_size_budget = _file_size_budget(output_format, gltf_options, usd_options, obj_options, stl_options)
     write_timer = timed_step()
     try:
@@ -744,9 +744,16 @@ def _report_stats(asset: Asset) -> dict[str, int]:
     return asset.stats(include_lods=any(part.lod_meshes for part in asset.parts.values()))
 
 
-def _add_texture_export_policy_report(asset: Asset, profile: ConversionProfile, output_format: ExportFormat) -> None:
+def _add_texture_export_policy_report(
+    asset: Asset,
+    profile: ConversionProfile,
+    output_format: ExportFormat,
+    *,
+    gltf_options: GltfExportOptions | None = None,
+) -> None:
     source_summaries = _material_texture_summaries(asset)
-    referenced_summaries = _material_texture_summaries_from_materials(referenced_materials(asset).values())
+    referenced_texture_materials = list(referenced_materials(asset).values())
+    referenced_summaries = _material_texture_summaries_from_materials(referenced_texture_materials)
     if not referenced_summaries:
         return
     budget = profile.budget
@@ -757,6 +764,12 @@ def _add_texture_export_policy_report(asset: Asset, profile: ConversionProfile, 
     after = dict(before)
     source_map_count, source_bytes = _texture_summary_totals(source_summaries)
     referenced_map_count, referenced_bytes = _texture_summary_totals(referenced_summaries)
+    fallback_stats: dict[str, int] = {}
+    fallback_label: str | None = None
+    gltf_fallback_options = gltf_options or GltfExportOptions()
+    if output_format == "gltf":
+        fallback_stats = _texture_fallback_stats(referenced_texture_materials, gltf_fallback_options)
+        fallback_label = _texture_fallback_label(gltf_fallback_options.texture_fallback_format)
     after.update(
         {
             "texture_policy_source_sets": len(source_summaries),
@@ -776,12 +789,33 @@ def _add_texture_export_policy_report(asset: Asset, profile: ConversionProfile, 
         "output_format": output_format,
         "texture_compression": "unsupported",
         "preferred_compressed_format": "KTX2/Basis" if output_format == "gltf" else None,
-        "fallback_texture_format": "PNG/JPEG" if output_format == "gltf" else "format-specific",
+        "fallback_texture_format": fallback_label if output_format == "gltf" else "format-specific",
     }
     warnings: list[str] = []
     if output_format == "gltf":
         after["texture_policy_ktx2_basisu_supported"] = 0
         after["texture_policy_png_jpeg_fallback_required"] = 1
+        after["texture_policy_fallback_png_compression"] = gltf_fallback_options.png_compression
+        after["texture_policy_fallback_jpeg_quality"] = gltf_fallback_options.jpeg_quality
+        after["texture_policy_fallback_auto"] = 1 if gltf_fallback_options.texture_fallback_format == "auto" else 0
+        after.update(fallback_stats)
+        options.update(
+            {
+                "texture_fallback_format": gltf_fallback_options.texture_fallback_format,
+                "png_compression": gltf_fallback_options.png_compression,
+                "jpeg_quality": gltf_fallback_options.jpeg_quality,
+                "fallback_policy": (
+                    "alpha_aware_auto" if gltf_fallback_options.texture_fallback_format == "auto" else "explicit"
+                ),
+            }
+        )
+        if fallback_stats.get("texture_policy_jpeg_alpha_risk_sets", 0) > 0:
+            warnings.append(
+                "texture export policy for "
+                f"{profile.name}: JPEG fallback would discard transparency for "
+                f"{fallback_stats['texture_policy_jpeg_alpha_risk_sets']} referenced texture set(s); "
+                "use auto or png fallback until first-class image conversion can split alpha maps"
+            )
 
     max_resolution = None if budget is None else budget.max_texture_resolution
     if max_resolution is not None:
@@ -1335,13 +1369,19 @@ def _material_texture_summaries(asset: Asset) -> list[tuple[int, int]]:
 def _material_texture_summaries_from_materials(materials: Iterable[Any]) -> list[tuple[int, int]]:
     summaries: list[tuple[int, int]] = []
     for material in materials:
-        for key in ("baked_texture_resolution", "maps_resolution"):
-            resolution = _metadata_positive_int(material.metadata.get(key))
-            if resolution is not None:
-                texture_count = max(1, _baked_texture_count(material.metadata.get("baked_maps")))
-                summaries.append((resolution, texture_count))
-                break
+        summary = _material_texture_summary(material)
+        if summary is not None:
+            summaries.append(summary)
     return summaries
+
+
+def _material_texture_summary(material: Any) -> tuple[int, int] | None:
+    for key in ("baked_texture_resolution", "maps_resolution"):
+        resolution = _metadata_positive_int(material.metadata.get(key))
+        if resolution is not None:
+            texture_count = max(1, _baked_texture_count(material.metadata.get("baked_maps")))
+            return resolution, texture_count
+    return None
 
 
 def _texture_summary_totals(summaries: list[tuple[int, int]]) -> tuple[int, int]:
@@ -1361,10 +1401,46 @@ def _resize_texture_summaries(summaries: list[tuple[int, int]], max_resolution: 
     return [(min(resolution, max_resolution), count) for resolution, count in summaries]
 
 
+def _texture_fallback_label(texture_fallback_format: str) -> str:
+    if texture_fallback_format == "png":
+        return "PNG"
+    if texture_fallback_format == "jpeg":
+        return "JPEG"
+    return "PNG/JPEG"
+
+
+def _texture_fallback_stats(materials: Iterable[Any], options: GltfExportOptions) -> dict[str, int]:
+    texture_materials = [material for material in materials if _material_texture_summary(material) is not None]
+    alpha_sets = sum(1 for material in texture_materials if _material_needs_alpha_safe_fallback(material))
+    color_sets = max(0, len(texture_materials) - alpha_sets)
+    if options.texture_fallback_format == "png":
+        png_sets = len(texture_materials)
+        jpeg_sets = 0
+    elif options.texture_fallback_format == "jpeg":
+        png_sets = 0
+        jpeg_sets = len(texture_materials)
+    else:
+        png_sets = alpha_sets
+        jpeg_sets = color_sets
+    return {
+        "texture_policy_alpha_texture_sets": alpha_sets,
+        "texture_policy_color_only_texture_sets": color_sets,
+        "texture_policy_png_fallback_sets": png_sets,
+        "texture_policy_jpeg_fallback_sets": jpeg_sets,
+        "texture_policy_jpeg_alpha_risk_sets": (alpha_sets if options.texture_fallback_format == "jpeg" else 0),
+    }
+
+
+def _material_needs_alpha_safe_fallback(material: Any) -> bool:
+    base_color = getattr(material, "base_color", (1.0, 1.0, 1.0, 1.0))
+    opacity = getattr(material, "opacity", 1.0)
+    alpha = base_color[3] if isinstance(base_color, tuple) and len(base_color) >= 4 else 1.0
+    maps = _baked_texture_maps(material.metadata.get("baked_maps"))
+    return bool(opacity < 1.0 or alpha < 1.0 or "opacity" in maps)
+
+
 def _baked_texture_count(value: object) -> int:
-    if not isinstance(value, str):
-        return 0
-    maps = {item.strip() for item in value.split(",") if item.strip()}
+    maps = _baked_texture_maps(value)
     count = 0
     if {"base_color", "opacity"} & maps:
         count += 1
@@ -1377,6 +1453,12 @@ def _baked_texture_count(value: object) -> int:
     if "emissive" in maps:
         count += 1
     return count
+
+
+def _baked_texture_maps(value: object) -> set[str]:
+    if not isinstance(value, str):
+        return set()
+    return {item.strip() for item in value.split(",") if item.strip()}
 
 
 def _metadata_positive_int(value: object) -> int | None:
@@ -1420,6 +1502,9 @@ def _with_gltf_metadata(
         meshopt=options.meshopt,
         draco=options.draco,
         texture_compression=options.texture_compression,
+        texture_fallback_format=options.texture_fallback_format,
+        png_compression=options.png_compression,
+        jpeg_quality=options.jpeg_quality,
         file_size_budget_mb=options.file_size_budget_mb,
         metadata=metadata,
     )

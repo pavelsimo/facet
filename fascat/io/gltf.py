@@ -264,6 +264,7 @@ def _runtime_decision_matrix(
 ) -> dict[str, object]:
     has_meshes = _has_exportable_meshes(asset)
     has_textures = _has_exportable_textures(asset)
+    fallback_policy = _runtime_texture_fallback_policy(asset, options)
     return {
         "geometry": {
             "quantization": {
@@ -317,8 +318,15 @@ def _runtime_decision_matrix(
                 "state": "source_textures_present" if has_textures else "no_texture_payload",
                 "best_for": "broad compatibility when KTX2/Basis is unavailable or unsupported by the runtime",
                 "tradeoff": "larger downloads and texture memory than GPU-native compressed textures",
+                "fallback_format": options.texture_fallback_format,
+                "resolved_format": fallback_policy["resolved_format"],
+                "png_compression": options.png_compression,
+                "jpeg_quality": options.jpeg_quality,
+                "alpha_texture_sets": fallback_policy["alpha_texture_sets"],
+                "color_only_texture_sets": fallback_policy["color_only_texture_sets"],
+                "jpeg_alpha_risk_sets": fallback_policy["jpeg_alpha_risk_sets"],
                 "recommendation": (
-                    "keep PNG/JPEG fallbacks while texture compression support is unavailable"
+                    fallback_policy["recommendation"]
                     if has_textures
                     else "no fallback texture files are needed because the asset has no texture payload"
                 ),
@@ -367,6 +375,51 @@ def _has_exportable_textures(asset: Asset) -> bool:
     return any(
         any(material.metadata.get(key) for key in _BAKED_TEXTURE_METADATA_KEYS) for material in asset.materials.values()
     )
+
+
+def _runtime_texture_fallback_policy(asset: Asset, options: GltfExportOptions) -> dict[str, object]:
+    texture_materials = [
+        material
+        for material in referenced_materials(asset).values()
+        if any(material.metadata.get(key) for key in _BAKED_TEXTURE_METADATA_KEYS)
+    ]
+    alpha_sets = sum(1 for material in texture_materials if _material_needs_alpha_safe_fallback(material))
+    color_sets = max(0, len(texture_materials) - alpha_sets)
+    label = _texture_fallback_label(options.texture_fallback_format)
+    jpeg_alpha_risk_sets = alpha_sets if options.texture_fallback_format == "jpeg" else 0
+    if jpeg_alpha_risk_sets:
+        recommendation = (
+            f"avoid JPEG fallback for {jpeg_alpha_risk_sets} alpha-bearing texture set(s); "
+            "use auto or PNG until image conversion can split alpha maps"
+        )
+    else:
+        recommendation = f"keep {label} fallbacks while texture compression support is unavailable"
+    return {
+        "resolved_format": label,
+        "alpha_texture_sets": alpha_sets,
+        "color_only_texture_sets": color_sets,
+        "jpeg_alpha_risk_sets": jpeg_alpha_risk_sets,
+        "recommendation": recommendation,
+    }
+
+
+def _texture_fallback_label(texture_fallback_format: str) -> str:
+    if texture_fallback_format == "png":
+        return "PNG"
+    if texture_fallback_format == "jpeg":
+        return "JPEG"
+    return "PNG/JPEG"
+
+
+def _material_needs_alpha_safe_fallback(material: Material) -> bool:
+    maps = _baked_texture_maps(material.metadata.get("baked_maps"))
+    return material.opacity < 1.0 or material.base_color[3] < 1.0 or "opacity" in maps
+
+
+def _baked_texture_maps(value: object) -> set[str]:
+    if not isinstance(value, str):
+        return set()
+    return {item.strip() for item in value.split(",") if item.strip()}
 
 
 def _has_exportable_lods(asset: Asset) -> bool:

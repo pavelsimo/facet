@@ -1136,6 +1136,21 @@ def cmd_convert(
         str | None,
         typer.Option("--texture-compression", help="Unsupported until a KTX2/Basis encoder backend is integrated."),
     ] = None,
+    texture_fallback_format: Annotated[
+        str,
+        typer.Option(
+            "--texture-fallback-format",
+            help="Fallback texture format while KTX2/Basis output is unavailable: auto, png, or jpeg.",
+        ),
+    ] = "auto",
+    png_compression: Annotated[
+        int,
+        typer.Option("--png-compression", help="PNG fallback compression level from 0 to 9."),
+    ] = 6,
+    jpeg_quality: Annotated[
+        int,
+        typer.Option("--jpeg-quality", help="JPEG fallback quality from 0 to 100."),
+    ] = 85,
     package: Annotated[
         UsdPackage,
         typer.Option("--package", help="USD package mode: default or usdz."),
@@ -1315,6 +1330,9 @@ def cmd_convert(
         "meshopt": meshopt,
         "draco": draco,
         "texture_compression": texture_compression,
+        "texture_fallback_format": texture_fallback_format,
+        "png_compression": png_compression,
+        "jpeg_quality": jpeg_quality,
         "package": package.value,
         "file_size_budget_mb": file_size_budget_mb,
         "obj_materials": obj_materials,
@@ -1467,6 +1485,14 @@ def cmd_convert(
             "--texture-compression is not supported because no KTX2/Basis encoder backend is integrated.",
             code=2,
         )
+    texture_fallback_format = texture_fallback_format.replace("-", "_")
+    payload["texture_fallback_format"] = texture_fallback_format
+    if texture_fallback_format not in {"auto", "png", "jpeg"}:
+        _fail(ctx, payload, "--texture-fallback-format must be one of: auto, png, jpeg.", code=2)
+    if png_compression < 0 or png_compression > 9:
+        _fail(ctx, payload, "--png-compression must be between 0 and 9.", code=2)
+    if jpeg_quality < 0 or jpeg_quality > 100:
+        _fail(ctx, payload, "--jpeg-quality must be between 0 and 100.", code=2)
     if draco:
         _fail(ctx, payload, "--draco is not supported because no Draco encoder backend is integrated.", code=2)
     if file_size_budget_mb is not None and file_size_budget_mb <= 0.0:
@@ -1754,6 +1780,9 @@ def cmd_convert(
             meshopt=meshopt,
             draco=draco,
             texture_compression=cast(Any, texture_compression),
+            texture_fallback_format=cast(Any, texture_fallback_format),
+            png_compression=png_compression,
+            jpeg_quality=jpeg_quality,
             file_size_budget_mb=file_size_budget_mb,
             metadata=export_metadata,
         )

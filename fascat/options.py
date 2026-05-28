@@ -40,6 +40,7 @@ OcclusionLevel = Literal["parts", "submeshes", "triangles"]
 LODPreset = Literal["desktop", "web", "mobile", "vr"]
 LODOutput = Literal["variants", "extras", "separate"]
 TextureCompression = Literal["ktx2", "basisu"]
+TextureFallbackFormat = Literal["auto", "png", "jpeg"]
 UsdPackageMode = Literal["default", "usdz"]
 MetadataExportMode = Literal["none", "summary", "full"]
 PmiExportMode = Literal["none", "summary", "metadata", "metadata_and_visuals", "full"]
@@ -766,12 +767,31 @@ class GltfExportOptions:
     meshopt: bool = False
     draco: bool = False
     texture_compression: TextureCompression | None = None
+    texture_fallback_format: TextureFallbackFormat = "auto"
+    png_compression: int = 6
+    jpeg_quality: int = 85
     file_size_budget_mb: float | None = None
     metadata: MetadataExportOptions = field(default_factory=MetadataExportOptions)
 
     def __post_init__(self) -> None:
+        fallback_format = (
+            self.texture_fallback_format.replace("-", "_")
+            if isinstance(self.texture_fallback_format, str)
+            else self.texture_fallback_format
+        )
+        object.__setattr__(self, "texture_fallback_format", fallback_format)
         if self.texture_compression not in {None, "ktx2", "basisu"}:
             raise ValueError("texture_compression must be one of: ktx2, basisu")
+        if self.texture_fallback_format not in {"auto", "png", "jpeg"}:
+            raise ValueError("texture_fallback_format must be one of: auto, png, jpeg")
+        if not isinstance(self.png_compression, int) or isinstance(self.png_compression, bool):
+            raise ValueError("png_compression must be an integer between 0 and 9")
+        if self.png_compression < 0 or self.png_compression > 9:
+            raise ValueError("png_compression must be between 0 and 9")
+        if not isinstance(self.jpeg_quality, int) or isinstance(self.jpeg_quality, bool):
+            raise ValueError("jpeg_quality must be an integer between 0 and 100")
+        if self.jpeg_quality < 0 or self.jpeg_quality > 100:
+            raise ValueError("jpeg_quality must be between 0 and 100")
         if self.texture_compression is not None:
             raise ValueError("texture compression is not supported because no KTX2/Basis encoder backend is integrated")
         if self.draco:

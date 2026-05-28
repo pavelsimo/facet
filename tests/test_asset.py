@@ -370,6 +370,9 @@ def test_asset_write_gltf_records_report_step(monkeypatch: pytest.MonkeyPatch, t
         "meshopt": False,
         "draco": False,
         "texture_compression": None,
+        "texture_fallback_format": "auto",
+        "png_compression": 6,
+        "jpeg_quality": 85,
         "file_size_budget_mb": None,
         "metadata": {"mode": "full", "pmi": "metadata"},
     }

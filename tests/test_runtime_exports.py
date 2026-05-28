@@ -216,7 +216,38 @@ def test_write_report_estimates_geometry_texture_and_metadata_payloads(tmp_path)
     texture_policy = runtime_dependencies["runtime_decision_matrix"]["textures"]
     assert texture_policy["ktx2_basisu"]["state"] == "unsupported"
     assert texture_policy["png_jpeg_fallbacks"]["state"] == "source_textures_present"
+    assert texture_policy["png_jpeg_fallbacks"]["fallback_format"] == "auto"
+    assert texture_policy["png_jpeg_fallbacks"]["resolved_format"] == "PNG/JPEG"
+    assert texture_policy["png_jpeg_fallbacks"]["png_compression"] == 6
+    assert texture_policy["png_jpeg_fallbacks"]["jpeg_quality"] == 85
+    assert texture_policy["png_jpeg_fallbacks"]["jpeg_alpha_risk_sets"] == 0
     assert "keep PNG/JPEG fallbacks" in texture_policy["png_jpeg_fallbacks"]["recommendation"]
+
+
+def test_gltf_runtime_texture_fallback_reports_alpha_risk(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    asset = _asset()
+    asset.materials["mat"] = Material(
+        id="mat",
+        name="Glass",
+        base_color=(1.0, 1.0, 1.0, 0.5),
+        opacity=0.5,
+        metadata={
+            "baked_texture_base_color_uri": "data:image/png;base64,QUJD",
+            "baked_maps": "base_color,opacity",
+        },
+    )
+    output = tmp_path / "glass.gltf"
+
+    asset.write_gltf(output, options=GltfExportOptions(texture_fallback_format="jpeg", jpeg_quality=70))
+    runtime_dependencies = asset.report.steps[-1].options["runtime_dependencies"]
+    fallback_policy = runtime_dependencies["runtime_decision_matrix"]["textures"]["png_jpeg_fallbacks"]
+
+    assert fallback_policy["fallback_format"] == "jpeg"
+    assert fallback_policy["resolved_format"] == "JPEG"
+    assert fallback_policy["jpeg_quality"] == 70
+    assert fallback_policy["alpha_texture_sets"] == 1
+    assert fallback_policy["jpeg_alpha_risk_sets"] == 1
+    assert "avoid JPEG fallback" in fallback_policy["recommendation"]
 
 
 def test_gltf_write_reports_lod_and_metadata_runtime_dependencies(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -329,6 +360,12 @@ def test_cli_convert_accepts_runtime_export_options_during_dry_run() -> None:
             "--meshopt",
             "--file-size-budget-mb",
             "50",
+            "--texture-fallback-format",
+            "png",
+            "--png-compression",
+            "9",
+            "--jpeg-quality",
+            "70",
             "--obj-materials",
             "--write-mtl",
             "--preserve-groups",
@@ -341,6 +378,9 @@ def test_cli_convert_accepts_runtime_export_options_during_dry_run() -> None:
     assert payload["quantize"] is True
     assert payload["meshopt"] is True
     assert payload["file_size_budget_mb"] == 50
+    assert payload["texture_fallback_format"] == "png"
+    assert payload["png_compression"] == 9
+    assert payload["jpeg_quality"] == 70
 
 
 def test_cli_convert_rejects_unsupported_draco_option_during_dry_run() -> None:

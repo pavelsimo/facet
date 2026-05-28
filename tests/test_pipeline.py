@@ -1160,6 +1160,9 @@ def test_convert_dispatches_gltf_writer_and_validator(monkeypatch, tmp_path: Pat
         "meshopt": False,
         "draco": False,
         "texture_compression": None,
+        "texture_fallback_format": "auto",
+        "png_compression": 6,
+        "jpeg_quality": 85,
         "file_size_budget_mb": None,
         "metadata": {"mode": "full", "pmi": "metadata"},
     }
@@ -1336,6 +1339,10 @@ def test_convert_reports_texture_export_policy_before_write(monkeypatch, tmp_pat
         "texture_compression": "unsupported",
         "preferred_compressed_format": "KTX2/Basis",
         "fallback_texture_format": "PNG/JPEG",
+        "texture_fallback_format": "auto",
+        "png_compression": 6,
+        "jpeg_quality": 85,
+        "fallback_policy": "alpha_aware_auto",
     }
     assert policy_step.after["texture_policy_source_sets"] == 2
     assert policy_step.after["texture_policy_source_maps"] == 3
@@ -1354,10 +1361,55 @@ def test_convert_reports_texture_export_policy_before_write(monkeypatch, tmp_pat
     assert policy_step.after["texture_policy_memory_over_budget_bytes"] == 0
     assert policy_step.after["texture_policy_ktx2_basisu_supported"] == 0
     assert policy_step.after["texture_policy_png_jpeg_fallback_required"] == 1
+    assert policy_step.after["texture_policy_fallback_png_compression"] == 6
+    assert policy_step.after["texture_policy_fallback_jpeg_quality"] == 85
+    assert policy_step.after["texture_policy_fallback_auto"] == 1
+    assert policy_step.after["texture_policy_alpha_texture_sets"] == 0
+    assert policy_step.after["texture_policy_color_only_texture_sets"] == 1
+    assert policy_step.after["texture_policy_png_fallback_sets"] == 0
+    assert policy_step.after["texture_policy_jpeg_fallback_sets"] == 1
+    assert policy_step.after["texture_policy_jpeg_alpha_risk_sets"] == 0
     assert policy_step.warnings == [
         "texture export policy for texture-cap: 1 referenced texture set(s) exceed 1024px; "
         "resize preprocessing is recommended before compressed or fallback texture export"
     ]
+    assert policy_step.warnings[0] in converted.report.warnings
+
+
+def test_convert_reports_alpha_risk_for_explicit_jpeg_texture_fallback(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    import fascat.pipeline as pipeline
+
+    source = _triangle_asset()
+    source.parts["part"].material_ids = ["glass"]
+    source.materials["glass"] = Material(
+        id="glass",
+        name="Glass",
+        base_color=(1.0, 1.0, 1.0, 0.35),
+        opacity=0.35,
+        metadata={"baked_texture_resolution": "512", "baked_maps": "base_color,opacity"},
+    )
+    monkeypatch.setattr(pipeline, "read_step", lambda _path: source)
+    monkeypatch.setattr(pipeline, "_write_gltf", lambda _asset, _path, *, options=None: None)
+
+    converted = convert(
+        "input.step",
+        tmp_path / "output.glb",
+        profile=_test_profile(),
+        gltf_options=GltfExportOptions(texture_fallback_format="jpeg", png_compression=9, jpeg_quality=72),
+        validate_output=False,
+    )
+    policy_step = next(step for step in converted.report.steps if step.name == "texture_export_policy")
+
+    assert policy_step.options["fallback_texture_format"] == "JPEG"
+    assert policy_step.options["texture_fallback_format"] == "jpeg"
+    assert policy_step.options["png_compression"] == 9
+    assert policy_step.options["jpeg_quality"] == 72
+    assert policy_step.after["texture_policy_alpha_texture_sets"] == 1
+    assert policy_step.after["texture_policy_color_only_texture_sets"] == 0
+    assert policy_step.after["texture_policy_png_fallback_sets"] == 0
+    assert policy_step.after["texture_policy_jpeg_fallback_sets"] == 1
+    assert policy_step.after["texture_policy_jpeg_alpha_risk_sets"] == 1
+    assert "JPEG fallback would discard transparency" in policy_step.warnings[0]
     assert policy_step.warnings[0] in converted.report.warnings
 
 

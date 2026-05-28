@@ -57,6 +57,11 @@ that are currently conservative approximations.
   referenced baked textures, with profile texture caps, resize candidates,
   before/after byte estimates, KTX2/Basis unsupported state, and PNG/JPEG
   fallback policy for glTF.
+- glTF texture fallback policy is now alpha-aware and exposes
+  `texture_fallback_format`, `png_compression`, and `jpeg_quality` through the
+  Python API, CLI, write reports, runtime decision matrix, and conversion
+  reports. Explicit JPEG fallback warns when referenced texture metadata
+  indicates transparency would be discarded.
 - USD export now authors `UsdUVTexture` shader networks for baked base-color,
   metallic-roughness, normal, occlusion, and emissive texture metadata when
   present.
@@ -227,6 +232,12 @@ Fresh gaps from the linked Unity audit:
   line geometry can be tessellated into tubes when users need wireframe or
   inspection views. Fascat currently exposes delete/preserve intent, not a
   renderable tube/curve conversion.
+- Add unit-aware tessellation tolerance policy reports. Unity documents sag,
+  sag-ratio, angle, and max-length criteria in millimeter-style CAD terms and
+  recommends adapting them to part size, material, and metadata. Fascat exposes
+  the criteria, but reports should show requested and effective sag/max-length
+  values in source, local, and target units and warn when unit normalization
+  makes the tolerances suspiciously coarse or fine.
 - Tessellation quality advisories now classify shiny, high-detail, or
   metadata-tagged parts and recommend finer per-part `sag_ratio` or
   curvature-adaptive criteria when bulk settings are still in use. Remaining
@@ -248,6 +259,11 @@ Fresh gaps from the linked Unity audit:
   target-device decisions. Fascat reports numeric quality and compatibility,
   but still lacks optional before/after preview renders, LOD switching checks,
   and measured engine/runtime load snapshots.
+- Texture fallback policy is now alpha-aware at report level. Unity's export
+  guidance keeps KTX2 as the GLB target, but falls back to PNG for
+  alpha-bearing textures and JPEG for color-only textures when KTX2 is not
+  used. Fascat now exposes the policy controls and warnings; remaining work is
+  to apply the policy to real image files in the future first-class image graph.
 - Extend LOD chain advisors beyond warnings. Fascat now warns about excessive
   level counts, aggressive close-view ratios, and geometry-only far LODs; the
   remaining parity gap is driving per-LOD material, texture-resolution, and
@@ -404,6 +420,7 @@ Parity gaps to track:
 
 4. Tessellation controls
    - Sag-ratio is now a first-class tessellation option across Python, CLI, TOML pipelines, per-part overrides, reports, and OCCT backend parameter mapping. `relative=True` remains for compatibility when `sag_ratio` is unset.
+   - Add unit-aware tessellation tolerance reporting so sag and max-polygon-length choices are recorded in source, local, and target units, with warnings for values that become unreasonable after unit normalization.
    - Existing imported meshes now have an explicit `reuse_existing_meshes` control across Python, CLI, TOML pipelines, per-part overrides, and reports. The default preserves imported meshes; disabling it retessellates from source BREP where available.
    - Free-edge tessellation diagnostics are now available through `free_edge_report` across Python, CLI, TOML pipelines, per-part overrides, metadata, and report warnings. Tessellation attribute provenance now records whether positions, triangles, normals, tangents, UVs, face groups, free-edge diagnostics, and BREP patches came from tessellation or imported meshes. Remaining work: investigate CAD-parametric UV and tangent generation during tessellation.
    - Add optional free-edge geometry output or retention, separate from diagnostics, for wire overlays, boundary inspection, and import cleanup validation.
@@ -486,16 +503,16 @@ Parity gaps to track:
    - Add real KTX2/Basis texture output with quality, compression level, and max-resolution controls.
    - Write reports now include estimated geometry, texture, metadata, and total payload bytes plus referenced, unused, and written material counts. They also report source, referenced, unused, duplicate-reference, and written image counts.
    - glTF, USD, and OBJ exports now prune unused materials from written artifacts without mutating the in-memory asset. glTF exports also omit images referenced only by unused materials and reuse duplicate embedded texture URIs. Remaining export cleanup work: format-specific resource pruning for first-class image files.
-   - Conversion reports now add a pre-write `texture_export_policy` step for referenced baked textures, including source/referenced/unused texture-set counts, per-profile maximum resolution, resize candidate counts, estimated before/after bytes, estimated savings, KTX2/Basis unsupported state, and PNG/JPEG fallback policy for glTF. Remaining work: perform real image resizing and compression on first-class image assets.
+   - Conversion reports now add a pre-write `texture_export_policy` step for referenced baked textures, including source/referenced/unused texture-set counts, per-profile maximum resolution, resize candidate counts, estimated before/after bytes, estimated savings, KTX2/Basis unsupported state, and alpha-aware PNG/JPEG fallback policy for glTF with PNG compression, JPEG quality, and transparency-loss warnings. Remaining work: perform real image resizing and compression on first-class image assets.
    - glTF write reports now list emitted runtime extensions, required extensions, `extras.fascat` metadata, unsupported Draco/KTX2 outputs, expected runtime support, target compatibility notes with fallback behavior, and a runtime decision matrix for quantization, meshopt, future Draco, future KTX2/Basis, and PNG/JPEG fallbacks.
    - Add Unity/glTFast-oriented GLB export profiles that combine extension support notes, Draco/KTX2 settings, fallback choices, and runtime compatibility warnings.
    - Runtime extension compatibility reports now cover Unity glTFast, web, mobile, and XR targets for `MSFT_lod`, `EXT_meshopt_compression`, `KHR_draco_mesh_compression`, `KHR_texture_basisu`, quantization, and fallback behavior.
    - Add baseline-versus-optimized export comparisons so reports show how much each preparation step changed file size, and warn when draw-call merging increases export size by breaking instancing.
-   - Format-aware texture export policy reports now prefer future KTX2/Basis for glTF/GLB, record PNG/JPEG fallback policy while texture compression is unavailable, and count only referenced texture sets for resize estimates. Remaining work: texture-capable non-glTF bindings and warnings when users compare source CAD file size directly against runtime mesh exports.
+   - Format-aware texture export policy reports now prefer future KTX2/Basis for glTF/GLB, record alpha-aware PNG/JPEG fallback policy while texture compression is unavailable, and count only referenced texture sets for resize estimates. Remaining work: texture-capable non-glTF bindings and warnings when users compare source CAD file size directly against runtime mesh exports.
    - Add named web, mobile, desktop, VR, AR/XR, and custom-device export presets that combine geometry compression, texture compression, texture resizing, and cleanup choices.
    - Keep GLB as the preferred web/mobile runtime target while preserving USD/USDZ for OpenUSD workflows.
    - Expose Draco quantization bits for positions, normals, UVs, and vertex colors once a real encoder is available.
-   - Expose PNG/JPEG fallback texture export settings, including PNG compression and JPEG quality, for formats or environments where KTX2 is not available.
+   - Alpha-aware PNG/JPEG fallback texture export settings now exist for glTF reports, including PNG compression, JPEG quality, automatic PNG/JPEG policy, and warnings when explicit JPEG fallback would discard transparency. Remaining work: apply the policy to actual texture files once first-class image resources and resizing/compression are implemented.
 
 11. Platform budgets
    - Desktop, WebGL/web, mobile, and VR profiles now include documented target-FPS, triangle, vertex, per-mesh vertex/index-buffer, texture-resolution, texture-memory, estimated load-time, and draw-call budgets.
