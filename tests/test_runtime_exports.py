@@ -76,6 +76,12 @@ def test_gltf_export_options_write_meshopt_extension_and_file_budget(tmp_path) -
     assert web_extensions["EXT_meshopt_compression"]["state"] == "optional"
     assert "fallback buffer data" in web_extensions["EXT_meshopt_compression"]["fallback"]
     assert web_extensions["KHR_texture_basisu"]["state"] == "not_written"
+    decision_matrix = runtime_dependencies["runtime_decision_matrix"]
+    geometry_policy = decision_matrix["geometry"]
+    assert geometry_policy["quantization"]["state"] == "enabled_required"
+    assert geometry_policy["meshopt"]["state"] == "enabled_optional"
+    assert geometry_policy["draco"]["state"] == "unsupported"
+    assert "prefer meshopt" in decision_matrix["targets"]["web"]["geometry"]
     assert asset.report.steps[-1].after["file_size_bytes"] > 0
     assert asset.report.steps[-1].after["export_estimated_geometry_bytes"] == 96
     assert asset.report.steps[-1].after["export_estimated_texture_bytes"] == 0
@@ -129,6 +135,7 @@ def test_write_report_estimates_geometry_texture_and_metadata_payloads(tmp_path)
 
     asset.write_gltf(output)
     after = asset.report.steps[-1].after
+    runtime_dependencies = asset.report.steps[-1].options["runtime_dependencies"]
 
     assert after["export_estimated_geometry_bytes"] == 96
     assert after["export_estimated_texture_bytes"] == 3
@@ -138,6 +145,10 @@ def test_write_report_estimates_geometry_texture_and_metadata_payloads(tmp_path)
         + after["export_estimated_texture_bytes"]
         + after["export_estimated_metadata_bytes"]
     )
+    texture_policy = runtime_dependencies["runtime_decision_matrix"]["textures"]
+    assert texture_policy["ktx2_basisu"]["state"] == "unsupported"
+    assert texture_policy["png_jpeg_fallbacks"]["state"] == "source_textures_present"
+    assert "keep PNG/JPEG fallbacks" in texture_policy["png_jpeg_fallbacks"]["recommendation"]
 
 
 def test_gltf_write_reports_lod_and_metadata_runtime_dependencies(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -163,6 +174,7 @@ def test_gltf_write_reports_lod_and_metadata_runtime_dependencies(tmp_path) -> N
     assert unity_extensions["MSFT_lod"]["state"] == "optional"
     assert unity_extensions["EXT_meshopt_compression"]["state"] == "not_used"
     assert unity_extensions["extras.fascat"]["state"] == "metadata"
+    assert runtime_dependencies["runtime_decision_matrix"]["geometry"]["meshopt"]["state"] == "available_not_requested"
 
 
 def test_obj_export_writes_mesh_and_mtl_sidecar(tmp_path) -> None:  # type: ignore[no-untyped-def]

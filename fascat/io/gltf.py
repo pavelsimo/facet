@@ -47,6 +47,13 @@ _RUNTIME_MATRIX_EXTENSIONS = (
     _KHR_TEXTURE_BASISU,
     _FASCAT_EXTRAS,
 )
+_BAKED_TEXTURE_METADATA_KEYS = (
+    "baked_texture_base_color_uri",
+    "baked_texture_metallic_roughness_uri",
+    "baked_texture_normal_uri",
+    "baked_texture_occlusion_uri",
+    "baked_texture_emissive_uri",
+)
 
 _COMPONENT_SIZES = {
     _BYTE: 1,
@@ -183,6 +190,11 @@ def runtime_dependency_report(asset: Asset, options: GltfExportOptions | None = 
             extensions_used=extensions_used,
             extensions_required=extensions_required,
         ),
+        "runtime_decision_matrix": _runtime_decision_matrix(
+            asset,
+            opts,
+            extensions_used=extensions_used,
+        ),
         "not_written": {
             _KHR_DRACO_MESH_COMPRESSION: "unsupported; draco=True is rejected before export",
             _KHR_TEXTURE_BASISU: "unsupported; texture_compression is rejected before export",
@@ -244,12 +256,117 @@ def _runtime_extension_fallback(extension: str) -> str:
     return "generic loaders may ignore Fascat extras without breaking geometry"
 
 
+def _runtime_decision_matrix(
+    asset: Asset,
+    options: GltfExportOptions,
+    *,
+    extensions_used: Sequence[str],
+) -> dict[str, object]:
+    has_meshes = _has_exportable_meshes(asset)
+    has_textures = _has_exportable_textures(asset)
+    return {
+        "geometry": {
+            "quantization": {
+                "extension": _KHR_MESH_QUANTIZATION,
+                "state": _method_state(
+                    enabled=_KHR_MESH_QUANTIZATION in extensions_used,
+                    available=has_meshes,
+                    enabled_state="enabled_required",
+                ),
+                "best_for": "smaller vertex payloads when loader support and CAD-edge precision are validated",
+                "tradeoff": "required extension when emitted; generic loaders without support cannot load the asset",
+                "recommendation": (
+                    "enable for web, mobile, or XR only after validating visual tolerance on the target loader"
+                    if not options.quantize
+                    else "validate quantized CAD edges on close-view target devices"
+                ),
+            },
+            "meshopt": {
+                "extension": _EXT_MESHOPT_COMPRESSION,
+                "state": _method_state(
+                    enabled=_EXT_MESHOPT_COMPRESSION in extensions_used,
+                    available=has_meshes,
+                    enabled_state="enabled_optional",
+                ),
+                "best_for": "web and mobile delivery where fast decode and broad fallback compatibility matter",
+                "tradeoff": "fallback buffer data increases written file size but keeps generic loaders usable",
+                "recommendation": (
+                    "prefer meshopt over future Draco when decode speed and fallback compatibility matter"
+                    if not options.meshopt
+                    else "keep fallback validation enabled for runtimes that ignore meshopt payloads"
+                ),
+            },
+            "draco": {
+                "extension": _KHR_DRACO_MESH_COMPRESSION,
+                "state": "unsupported",
+                "best_for": "smallest geometry payloads when a Draco-capable loader and decode budget are proven",
+                "tradeoff": "requires decoder setup and can add noticeable startup/decode cost on mobile or XR",
+                "recommendation": "not selectable until Fascat integrates a reliable Draco encoder backend",
+            },
+        },
+        "textures": {
+            "ktx2_basisu": {
+                "extension": _KHR_TEXTURE_BASISU,
+                "state": "unsupported",
+                "best_for": "GPU texture delivery on web, mobile, and XR after real image assets exist",
+                "tradeoff": "requires texture transcoding support and target-specific quality settings",
+                "recommendation": "not selectable until Fascat has a first-class image graph and KTX2/Basis encoder",
+            },
+            "png_jpeg_fallbacks": {
+                "extension": None,
+                "state": "source_textures_present" if has_textures else "no_texture_payload",
+                "best_for": "broad compatibility when KTX2/Basis is unavailable or unsupported by the runtime",
+                "tradeoff": "larger downloads and texture memory than GPU-native compressed textures",
+                "recommendation": (
+                    "keep PNG/JPEG fallbacks while texture compression support is unavailable"
+                    if has_textures
+                    else "no fallback texture files are needed because the asset has no texture payload"
+                ),
+            },
+        },
+        "targets": {
+            "unity_gltfast": {
+                "preferred_container": "glb",
+                "geometry": "use quantization or meshopt only after confirming installed glTFast extension support",
+                "textures": "prefer KTX2/Basis later, with PNG/JPEG fallbacks for unsupported projects",
+            },
+            "web": {
+                "preferred_container": "glb",
+                "geometry": "prefer meshopt for fast browser decode; use Draco only when smallest download matters more",
+                "textures": "prefer KTX2/Basis later, while keeping PNG/JPEG fallbacks for loader coverage",
+            },
+            "mobile": {
+                "preferred_container": "glb",
+                "geometry": "prefer meshopt or quantization after device tests; treat future Draco decode cost carefully",
+                "textures": "use KTX2/Basis later with profile texture limits and PNG/JPEG fallbacks as needed",
+            },
+            "xr": {
+                "preferred_container": "glb",
+                "geometry": "prefer predictable meshopt/quantization paths over decode-heavy future Draco payloads",
+                "textures": "profile KTX2/Basis transcoding and memory before removing PNG/JPEG fallbacks",
+            },
+        },
+    }
+
+
+def _method_state(*, enabled: bool, available: bool, enabled_state: str) -> str:
+    if enabled:
+        return enabled_state
+    return "available_not_requested" if available else "not_applicable"
+
+
 def _has_exportable_meshes(asset: Asset) -> bool:
     for part in asset.parts.values():
         meshes = (part.mesh, *part.lod_meshes)
         if any(mesh is not None and mesh.vertex_count > 0 for mesh in meshes):
             return True
     return False
+
+
+def _has_exportable_textures(asset: Asset) -> bool:
+    return any(
+        any(material.metadata.get(key) for key in _BAKED_TEXTURE_METADATA_KEYS) for material in asset.materials.values()
+    )
 
 
 def _has_exportable_lods(asset: Asset) -> bool:

@@ -93,6 +93,9 @@ that are currently conservative approximations.
 - glTF write reports now include a runtime compatibility matrix for Unity
   glTFast, web, mobile, and XR targets with extension state, support, and
   fallback notes.
+- glTF write reports now include a runtime decision matrix explaining when
+  quantization, meshopt, future Draco, future KTX2/Basis, and PNG/JPEG
+  fallbacks are appropriate for Unity glTFast, web, mobile, and XR targets.
 - Augmented-reality and mixed-reality profiles now expose stricter AR/XR device
   budgets through Python, CLI selection, tests, and docs.
 - Custom target-device profile files now load TOML/JSON budget overlays on a
@@ -236,11 +239,11 @@ Fresh gaps from the linked Unity audit:
   level counts, aggressive close-view ratios, and geometry-only far LODs; the
   remaining parity gap is driving per-LOD material, texture-resolution, and
   culling-granularity policy from those advisories.
-- Add a meshopt-versus-Draco runtime decision matrix. Unity's export guidance is
-  Draco/KTX2 and glTFast oriented; Fascat already supports quantization/meshopt
-  and rejects Draco/KTX2 until real encoders exist. Remaining parity is not only
-  encoder support but a target-runtime policy that explains when meshopt,
-  Draco, quantization, PNG/JPEG, or KTX2 is the right export choice.
+- Extend runtime decision guidance into presets. Fascat now reports when
+  quantization, meshopt, future Draco, future KTX2/Basis, and PNG/JPEG
+  fallbacks are appropriate for Unity glTFast, web, mobile, and XR targets.
+  Remaining parity is to make named export presets apply those choices once
+  real Draco and KTX2/Basis encoders exist.
 
 Second-pass gaps from the Unity references:
 
@@ -468,7 +471,7 @@ Parity gaps to track:
    - Write reports now include estimated geometry, texture, metadata, and total payload bytes plus referenced, unused, and written material counts.
    - glTF, USD, and OBJ exports now prune unused materials from written artifacts without mutating the in-memory asset. Remaining export cleanup work: unused image removal and format-specific resource pruning.
    - Add texture-resize preprocessing with before/after dimensions, byte estimates, and per-profile maximums before KTX2/PNG/JPEG export decisions.
-   - glTF write reports now list emitted runtime extensions, required extensions, `extras.fascat` metadata, unsupported Draco/KTX2 outputs, expected runtime support, and target compatibility notes with fallback behavior.
+   - glTF write reports now list emitted runtime extensions, required extensions, `extras.fascat` metadata, unsupported Draco/KTX2 outputs, expected runtime support, target compatibility notes with fallback behavior, and a runtime decision matrix for quantization, meshopt, future Draco, future KTX2/Basis, and PNG/JPEG fallbacks.
    - Add Unity/glTFast-oriented GLB export profiles that combine extension support notes, Draco/KTX2 settings, fallback choices, and runtime compatibility warnings.
    - Runtime extension compatibility reports now cover Unity glTFast, web, mobile, and XR targets for `MSFT_lod`, `EXT_meshopt_compression`, `KHR_draco_mesh_compression`, `KHR_texture_basisu`, quantization, and fallback behavior.
    - Add baseline-versus-optimized export comparisons so reports show how much each preparation step changed file size, and warn when draw-call merging increases export size by breaking instancing.
