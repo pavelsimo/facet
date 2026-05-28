@@ -12,6 +12,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from fascat.asset import Asset, Node, Part
+from fascat.export_report import referenced_materials
 from fascat.material import Material
 from fascat.mesh import Mesh
 from fascat.metadata import pmi_ids_by_part
@@ -382,7 +383,7 @@ def _build_document(
     builder = _BufferBuilder()
     images: list[dict[str, object]] = []
     textures: list[dict[str, object]] = []
-    material_indices = _write_materials(asset.materials, metadata_options, images, textures)
+    material_indices = _write_materials(referenced_materials(asset), metadata_options, images, textures)
     meshes: list[dict[str, Any]] = []
     part_meshes: dict[str, int] = {}
     part_lods: dict[str, list[dict[str, object]]] = {}

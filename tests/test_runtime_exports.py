@@ -81,8 +81,38 @@ def test_gltf_export_options_write_meshopt_extension_and_file_budget(tmp_path) -
     assert asset.report.steps[-1].after["export_estimated_texture_bytes"] == 0
     assert asset.report.steps[-1].after["export_estimated_metadata_bytes"] == 0
     assert asset.report.steps[-1].after["export_estimated_payload_bytes"] == 96
+    assert asset.report.steps[-1].after["export_source_material_count"] == 1
+    assert asset.report.steps[-1].after["export_referenced_material_count"] == 1
+    assert asset.report.steps[-1].after["export_unused_material_count"] == 0
+    assert asset.report.steps[-1].after["export_written_material_count"] == 1
     assert asset.report.steps[-1].after["file_size_budget_bytes"] == 1
     assert "file size budget exceeded" in asset.report.warnings[-1]
+
+
+def test_exports_prune_unused_materials_and_report_counts(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    gltf_asset = _asset()
+    gltf_asset.materials["unused"] = Material(id="unused", name="Unused", base_color=(1.0, 0.0, 0.0, 1.0))
+    gltf_output = tmp_path / "used.gltf"
+
+    gltf_asset.write_gltf(gltf_output)
+    document = json.loads(gltf_output.read_text(encoding="utf-8"))
+    after = gltf_asset.report.steps[-1].after
+
+    assert [material["name"] for material in document["materials"]] == ["Mat"]
+    assert after["export_source_material_count"] == 2
+    assert after["export_referenced_material_count"] == 1
+    assert after["export_unused_material_count"] == 1
+    assert after["export_written_material_count"] == 1
+
+    obj_asset = _asset()
+    obj_asset.materials["unused"] = Material(id="unused", name="Unused", base_color=(1.0, 0.0, 0.0, 1.0))
+    obj_output = tmp_path / "used.obj"
+
+    obj_asset.write_obj(obj_output, options=ObjExportOptions(materials=True, write_mtl=True))
+    mtl = obj_output.with_suffix(".mtl").read_text(encoding="utf-8")
+
+    assert "newmtl mat" in mtl
+    assert "newmtl unused" not in mtl
 
 
 def test_write_report_estimates_geometry_texture_and_metadata_payloads(tmp_path) -> None:  # type: ignore[no-untyped-def]

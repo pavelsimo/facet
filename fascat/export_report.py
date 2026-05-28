@@ -33,6 +33,7 @@ def stats_with_file_size(
         "file_size_bytes": size,
         **estimates,
         "export_estimated_payload_bytes": sum(estimates.values()),
+        **export_material_counts(asset),
     }
     if budget_mb is not None:
         budget_bytes = int(budget_mb * 1_000_000)
@@ -48,6 +49,41 @@ def export_payload_estimates(asset: Any) -> dict[str, int]:
         "export_estimated_texture_bytes": _texture_bytes(asset),
         "export_estimated_metadata_bytes": _metadata_bytes(asset),
     }
+
+
+def export_material_counts(asset: Any) -> dict[str, int]:
+    referenced = referenced_material_ids(asset)
+    return {
+        "export_source_material_count": len(asset.materials),
+        "export_referenced_material_count": len(referenced),
+        "export_unused_material_count": max(0, len(asset.materials) - len(referenced)),
+        "export_written_material_count": len(referenced),
+    }
+
+
+def referenced_material_ids(asset: Any) -> set[str]:
+    referenced: set[str] = set()
+    for part in asset.parts.values():
+        if part.mesh is not None:
+            referenced.update(_mesh_material_ids(part, part.mesh))
+        for lod_mesh in part.lod_meshes:
+            referenced.update(_mesh_material_ids(part, lod_mesh))
+    return {material_id for material_id in referenced if material_id in asset.materials}
+
+
+def referenced_materials(asset: Any) -> dict[str, Any]:
+    referenced = referenced_material_ids(asset)
+    return {material_id: material for material_id, material in asset.materials.items() if material_id in referenced}
+
+
+def _mesh_material_ids(part: Any, mesh: Mesh) -> set[str]:
+    if mesh.material_indices is None or mesh.material_indices.size == 0:
+        return set(part.material_ids)
+    used: set[str] = set()
+    for index in set(mesh.material_indices.astype(int).tolist()):
+        if 0 <= index < len(part.material_ids):
+            used.add(part.material_ids[index])
+    return used
 
 
 def _geometry_bytes(asset: Any) -> int:

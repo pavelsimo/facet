@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 
 from fascat.asset import Asset, Node, Part
+from fascat.export_report import referenced_materials
 from fascat.material import Material
 from fascat.metadata import pmi_ids_by_part
 from fascat.options import MetadataExportOptions, UsdExportOptions
@@ -85,7 +86,7 @@ def _write_usd_stage(
         scene.GetPrim().SetCustomDataByKey("fascat:pmiCount", len(asset.pmi))
     scene.GetPrim().SetCustomDataByKey("fascat:exportOptions", _custom_data(opts.to_dict()))
 
-    material_paths = _write_materials(stage, asset.materials, opts.metadata)
+    material_paths = _write_materials(stage, referenced_materials(asset), opts.metadata)
     pmi_by_part = _pmi_by_part(asset) if opts.metadata.pmi != "none" else {}
     prototype_paths = _write_prototypes(stage, asset.parts, asset.materials, material_paths, pmi_by_part, opts.metadata)
     occurrence_counts = _part_occurrence_counts(asset.root)
