@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -452,6 +454,102 @@ def test_repair_records_t_junction_counts() -> None:
     assert mesh.t_junction_count() == 1
     assert repaired.metadata["repair_t_junctions_before"] == "1"
     assert repaired.metadata["repair_t_junctions_after"] == "1"
+
+
+def _t_junction_count_bruteforce(mesh: Mesh, *, tolerance: float = 1e-9) -> int:
+    """Original O(edges x vertices) implementation, kept as a reference oracle for the
+    spatial-hashed t_junction_count (the two must return identical counts)."""
+    if mesh.triangle_count == 0 or mesh.vertex_count < 3:
+        return 0
+    distance_tolerance = max(float(tolerance), 1e-12)
+    edges, _counts = mesh._undirected_edges_and_counts()
+    conflicts: set[tuple[int, int, int]] = set()
+    for start_index, end_index in edges.astype(int).tolist():
+        start = mesh.points[start_index]
+        end = mesh.points[end_index]
+        vector = end - start
+        length_squared = float(np.dot(vector, vector))
+        if length_squared <= distance_tolerance * distance_tolerance:
+            continue
+        minimum = np.minimum(start, end) - distance_tolerance
+        maximum = np.maximum(start, end) + distance_tolerance
+        candidates = np.flatnonzero(np.all((mesh.points >= minimum) & (mesh.points <= maximum), axis=1))
+        if candidates.size == 0:
+            continue
+        candidate_points = mesh.points[candidates]
+        projection = ((candidate_points - start) @ vector) / length_squared
+        length = math.sqrt(length_squared)
+        endpoint_margin = distance_tolerance / length
+        interior = (projection > endpoint_margin) & (projection < 1.0 - endpoint_margin)
+        if not np.any(interior):
+            continue
+        projected = start + (projection[:, None] * vector)
+        distances = np.linalg.norm(candidate_points - projected, axis=1)
+        on_edge = interior & (distances <= distance_tolerance)
+        for candidate in candidates[on_edge].astype(int).tolist():
+            if candidate in {start_index, end_index}:
+                continue
+            conflicts.add((min(start_index, end_index), max(start_index, end_index), candidate))
+    return len(conflicts)
+
+
+def _random_mesh(rng: np.random.Generator, *, vertices: int, faces: int, scale: float = 1.0) -> Mesh:
+    points = rng.uniform(-scale, scale, size=(vertices, 3))
+    face_indices = rng.integers(0, vertices, size=(faces, 3))
+    return Mesh(points=points, faces=face_indices)
+
+
+def _grid_plane_mesh(n: int) -> Mesh:
+    xs, ys = np.meshgrid(np.arange(n, dtype=float), np.arange(n, dtype=float))
+    points = np.column_stack([xs.ravel(), ys.ravel(), np.zeros(n * n)])
+    idx = np.arange(n * n).reshape(n, n)
+    faces: list[list[int]] = []
+    for i in range(n - 1):
+        for j in range(n - 1):
+            a, b, c, d = idx[i, j], idx[i, j + 1], idx[i + 1, j], idx[i + 1, j + 1]
+            faces.append([int(a), int(b), int(c)])
+            faces.append([int(b), int(d), int(c)])
+    return Mesh(points=points, faces=np.asarray(faces, dtype=int))
+
+
+def _cap_fallback_mesh() -> Mesh:
+    # A dense unit-scale cluster (median edge ~1) plus one very long diagonal edge, so that
+    # the long edge's cell box exceeds the per-edge budget and exercises the full-scan fallback.
+    points = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.5, 0.5, 0.0],
+            [400.0, 400.0, 400.0],
+        ],
+        dtype=float,
+    )
+    faces = np.array([[0, 1, 2], [1, 3, 2], [0, 4, 5]], dtype=int)
+    return Mesh(points=points, faces=faces)
+
+
+def test_t_junction_count_matches_bruteforce() -> None:
+    rng = np.random.default_rng(20240529)
+    meshes: list[Mesh] = [
+        valid_triangle(),
+        Mesh(
+            points=np.array([[0, 0, 0], [2, 0, 0], [0, 1, 0], [1, 0, 0], [1, -1, 0]], dtype=float),
+            faces=np.array([[0, 1, 2], [0, 3, 4]], dtype=int),
+        ),
+        Mesh(points=np.zeros((4, 3), dtype=float), faces=np.array([[0, 1, 2], [1, 2, 3]], dtype=int)),
+        _grid_plane_mesh(6),
+        _cap_fallback_mesh(),
+        _random_mesh(rng, vertices=80, faces=120),
+        _random_mesh(rng, vertices=200, faces=400, scale=3.0),
+        _random_mesh(rng, vertices=12, faces=400, scale=2.0),
+    ]
+    for index, mesh in enumerate(meshes):
+        for tolerance in (1e-9, 1e-6, 1e-3, 0.1, 0.5, 1.0):
+            assert mesh.t_junction_count(tolerance=tolerance) == _t_junction_count_bruteforce(
+                mesh, tolerance=tolerance
+            ), f"mesh #{index} disagreed at tolerance {tolerance}"
 
 
 def test_repair_records_boundary_gap_counts() -> None:

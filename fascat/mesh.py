@@ -17,6 +17,12 @@ FloatArray = NDArray[np.float64]
 IntArray = NDArray[np.int64]
 Point2D = tuple[float, float]
 
+# Upper bound on the number of grid cells a single edge's bounding box may span
+# before t_junction_count falls back to a full-array scan for that edge. Keeps
+# per-edge work bounded for rare giant/diagonal edges (which only occur on coarse
+# meshes, where the full scan is cheap anyway).
+_T_JUNCTION_CELL_BUDGET = 4096
+
 
 class MeshValidationError(ValueError):
     """Raised when mesh arrays are not usable by the pipeline."""
@@ -858,20 +864,31 @@ class Mesh:
             return 0
         distance_tolerance = max(float(tolerance), 1e-12)
         edges, _counts = self._undirected_edges_and_counts()
+        if edges.shape[0] == 0:
+            return 0
+        # Bucket every vertex into a spatial grid once, then probe only the cells near
+        # each edge instead of scanning all points per edge (was O(edges x vertices)).
+        edge_lengths = self._triangle_edge_lengths().reshape(-1)
+        positive_lengths = edge_lengths[edge_lengths > 0.0]
+        if positive_lengths.size == 0:
+            return 0
+        cell_size = max(float(np.median(positive_lengths)), distance_tolerance)
+        buckets = self._point_cell_buckets(cell_size)
+        points = self.points
         conflicts: set[tuple[int, int, int]] = set()
         for start_index, end_index in edges.astype(int).tolist():
-            start = self.points[start_index]
-            end = self.points[end_index]
+            start = points[start_index]
+            end = points[end_index]
             vector = end - start
             length_squared = float(np.dot(vector, vector))
             if length_squared <= distance_tolerance * distance_tolerance:
                 continue
             minimum = np.minimum(start, end) - distance_tolerance
             maximum = np.maximum(start, end) + distance_tolerance
-            candidates = np.flatnonzero(np.all((self.points >= minimum) & (self.points <= maximum), axis=1))
+            candidates = self._segment_candidate_vertices(minimum, maximum, cell_size, buckets)
             if candidates.size == 0:
                 continue
-            candidate_points = self.points[candidates]
+            candidate_points = points[candidates]
             projection = np.asarray(((candidate_points - start) @ vector) / length_squared, dtype=np.float64)
             length = math.sqrt(length_squared)
             endpoint_margin = distance_tolerance / length
@@ -886,6 +903,60 @@ class Mesh:
                     continue
                 conflicts.add((min(start_index, end_index), max(start_index, end_index), candidate))
         return len(conflicts)
+
+    def _point_cell_buckets(self, cell_size: float) -> dict[tuple[int, int, int], IntArray]:
+        """Group every vertex index by its integer grid cell ``floor(point / cell_size)``."""
+        if self.vertex_count == 0:
+            return {}
+        keys = np.floor(self.points / cell_size).astype(np.int64)
+        order = np.lexsort((keys[:, 2], keys[:, 1], keys[:, 0]))
+        sorted_keys = keys[order]
+        if sorted_keys.shape[0] > 1:
+            changed = np.any(sorted_keys[1:] != sorted_keys[:-1], axis=1)
+            boundaries = np.flatnonzero(changed) + 1
+        else:
+            boundaries = np.empty(0, dtype=np.int64)
+        groups = np.split(order, boundaries)
+        starts = np.concatenate([np.zeros(1, dtype=np.int64), boundaries])
+        buckets: dict[tuple[int, int, int], IntArray] = {}
+        for group_start, group in zip(starts.tolist(), groups, strict=True):
+            key = sorted_keys[group_start]
+            buckets[(int(key[0]), int(key[1]), int(key[2]))] = np.asarray(group, dtype=np.int64)
+        return buckets
+
+    def _segment_candidate_vertices(
+        self,
+        minimum: FloatArray,
+        maximum: FloatArray,
+        cell_size: float,
+        buckets: dict[tuple[int, int, int], IntArray],
+    ) -> IntArray:
+        """Vertices whose grid cell overlaps the ``[minimum, maximum]`` box (a superset of the box).
+
+        Falls back to a full-array scan when the box spans too many cells, keeping per-edge work
+        bounded while remaining an exact superset of the box-contained points either way.
+
+        ``minimum``/``maximum`` already include the tolerance margin, and any point inside that box
+        has cell key within ``[floor(minimum), floor(maximum)]`` (floor is monotonic), so no extra
+        halo ring is needed for correctness.
+        """
+        low = np.floor(minimum / cell_size).astype(np.int64)
+        high = np.floor(maximum / cell_size).astype(np.int64)
+        dims = high - low + 1
+        cell_count = int(dims[0]) * int(dims[1]) * int(dims[2])
+        if cell_count > _T_JUNCTION_CELL_BUDGET:
+            mask = np.all((self.points >= minimum) & (self.points <= maximum), axis=1)
+            return cast(IntArray, np.flatnonzero(mask).astype(np.int64))
+        collected: list[IntArray] = []
+        for i in range(int(low[0]), int(high[0]) + 1):
+            for j in range(int(low[1]), int(high[1]) + 1):
+                for k in range(int(low[2]), int(high[2]) + 1):
+                    bucket = buckets.get((i, j, k))
+                    if bucket is not None:
+                        collected.append(bucket)
+        if not collected:
+            return np.empty(0, dtype=np.int64)
+        return cast(IntArray, np.concatenate(collected))
 
     def boundary_gap_count(self, *, tolerance: float = 1e-9) -> int:
         if self.triangle_count == 0 or self.vertex_count < 2:
